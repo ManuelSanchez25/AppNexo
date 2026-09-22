@@ -8,6 +8,9 @@ namespace Nexo.Api.Services
 {
     public class PushNotificationService
     {
+        private static readonly object FirebaseLock = new();
+        private static FirebaseMessaging? _sharedMessaging;
+        private static bool _firebaseInitializationAttempted;
         private readonly AppDbContext _db;
         private readonly ILogger<PushNotificationService> _logger;
         private readonly FirebaseMessaging? _messaging;
@@ -26,17 +29,31 @@ namespace Nexo.Api.Services
                 return;
             }
 
-            try
+            lock (FirebaseLock)
             {
-                var app = FirebaseApp.Create(new AppOptions
+                if (_sharedMessaging != null)
                 {
-                    Credential = GoogleCredential.FromJson(serviceAccountJson)
-                }, "nexo-push");
-                _messaging = FirebaseMessaging.GetMessaging(app);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "No pudimos inicializar Firebase Admin.");
+                    _messaging = _sharedMessaging;
+                    return;
+                }
+
+                if (_firebaseInitializationAttempted)
+                    return;
+
+                _firebaseInitializationAttempted = true;
+                try
+                {
+                    var app = FirebaseApp.Create(new AppOptions
+                    {
+                        Credential = GoogleCredential.FromJson(serviceAccountJson)
+                    }, "nexo-push");
+                    _sharedMessaging = FirebaseMessaging.GetMessaging(app);
+                    _messaging = _sharedMessaging;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "No pudimos inicializar Firebase Admin.");
+                }
             }
         }
 

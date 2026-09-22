@@ -14,13 +14,16 @@ namespace Nexo.Api.Controllers
     {
         private readonly IOrderService _orderService;
         private readonly IOrderRealtimeService _realtimeService;
+        private readonly ILogger<OrdersController> _logger;
 
         public OrdersController(
             IOrderService orderService,
-            IOrderRealtimeService realtimeService)
+            IOrderRealtimeService realtimeService,
+            ILogger<OrdersController> logger)
         {
             _orderService = orderService;
             _realtimeService = realtimeService;
+            _logger = logger;
         }
 
         [HttpPost]
@@ -46,6 +49,12 @@ namespace Nexo.Api.Controllers
             catch (KeyNotFoundException ex)
             {
                 return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "No se pudo crear un pedido para el usuario {UserId}.", GetAuthenticatedUserId());
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "No pudimos crear el pedido. Inténtalo nuevamente.");
             }
         }
 
