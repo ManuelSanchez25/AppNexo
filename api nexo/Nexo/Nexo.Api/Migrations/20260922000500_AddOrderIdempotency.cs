@@ -1,33 +1,35 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Nexo.Api.Data;
 
 #nullable disable
 
 namespace Nexo.Api.Migrations
 {
+    [DbContext(typeof(AppDbContext))]
+    [Migration("20260922000500_AddOrderIdempotency")]
     public partial class AddOrderIdempotency : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "ClientRequestId",
-                table: "Orders",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: false,
-                defaultValue: "");
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Orders"
+                    ADD COLUMN IF NOT EXISTS "ClientRequestId" character varying(64) NOT NULL DEFAULT '';
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_UserId_ClientRequestId",
-                table: "Orders",
-                columns: new[] { "UserId", "ClientRequestId" },
-                unique: true,
-                filter: "\"ClientRequestId\" <> ''");
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_Orders_UserId_ClientRequestId"
+                    ON "Orders" ("UserId", "ClientRequestId")
+                    WHERE "ClientRequestId" <> '';
+                """);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(name: "IX_Orders_UserId_ClientRequestId", table: "Orders");
-            migrationBuilder.DropColumn(name: "ClientRequestId", table: "Orders");
+            migrationBuilder.Sql(
+                """
+                DROP INDEX IF EXISTS "IX_Orders_UserId_ClientRequestId";
+                ALTER TABLE "Orders" DROP COLUMN IF EXISTS "ClientRequestId";
+                """);
         }
     }
 }
