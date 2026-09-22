@@ -6,6 +6,25 @@ import 'package:nexo/config/api_config.dart';
 import 'package:nexo/shared/models/login_response.dart';
 
 class AuthApi {
+  static Future<void> registerPushDevice({
+    required String token,
+    required String deviceToken,
+    required String platform,
+  }) async {
+    final response = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/push/devices'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'token': deviceToken, 'platform': platform}),
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception('No pudimos registrar las notificaciones.');
+    }
+  }
+
   static Future<LoginResponse> register({
     required String name,
     required String email,

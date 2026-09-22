@@ -20,6 +20,7 @@ namespace Nexo.Api.Data
         public DbSet<Order> Orders => Set<Order>();
         public DbSet<OrderItem> OrderItems => Set<OrderItem>();
         public DbSet<OrderItemOptionSelection> OrderItemOptionSelections => Set<OrderItemOptionSelection>();
+        public DbSet<PushDevice> PushDevices => Set<PushDevice>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -44,6 +45,21 @@ namespace Nexo.Api.Data
             modelBuilder.Entity<User>()
                 .Property(u => u.DriverApprovalStatus)
                 .HasMaxLength(30);
+
+            modelBuilder.Entity<PushDevice>()
+                .HasIndex(d => d.Token)
+                .IsUnique();
+            modelBuilder.Entity<PushDevice>()
+                .Property(d => d.Token)
+                .HasMaxLength(4096);
+            modelBuilder.Entity<PushDevice>()
+                .Property(d => d.Platform)
+                .HasMaxLength(20);
+            modelBuilder.Entity<PushDevice>()
+                .HasOne(d => d.User)
+                .WithMany(u => u.PushDevices)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<User>().Property(u => u.DriverVehicleType).HasMaxLength(20);
             modelBuilder.Entity<User>().Property(u => u.DriverVehicleMakeModel).HasMaxLength(100);

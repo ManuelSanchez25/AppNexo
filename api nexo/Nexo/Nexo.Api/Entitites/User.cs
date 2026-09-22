@@ -36,5 +36,6 @@ namespace Nexo.Api.Entitites
         public List<Address> Addresses { get; set; } = new();
         public List<Order> Orders { get; set; } = new();
         public List<Order> DriverOrders { get; set; } = new();
+        public List<PushDevice> PushDevices { get; set; } = new();
     }
 }
