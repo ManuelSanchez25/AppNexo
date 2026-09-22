@@ -26,6 +26,7 @@ namespace Nexo.Api.Controllers
         private readonly PasswordHasher<User> _hasher = new();
         private readonly byte[] _jwtKey;
         private readonly HashSet<string> _googleClientIds;
+        private readonly bool _requireEmailVerification;
 
         public AuthController(
             AppDbContext db,
@@ -45,6 +46,9 @@ namespace Nexo.Api.Controllers
             _googleClientIds = (configuration["Google:ClientIds"] ?? string.Empty)
                 .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _requireEmailVerification = bool.TryParse(
+                configuration["Email:RequireVerification"],
+                out var requireEmailVerification) && requireEmailVerification;
         }
 
         [HttpPost("login")]
@@ -68,7 +72,9 @@ namespace Nexo.Api.Controllers
             if (user == null)
                 return Unauthorized("Usuario o contraseña incorrectos");
 
-            if (!string.IsNullOrWhiteSpace(user.Email) && !user.EmailVerified)
+            if (_requireEmailVerification &&
+                !string.IsNullOrWhiteSpace(user.Email) &&
+                !user.EmailVerified)
                 return StatusCode(403, "Verifica tu correo antes de entrar.");
 
             var result = _hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
@@ -163,7 +169,7 @@ namespace Nexo.Api.Controllers
                 Name = username,
                 Email = email,
                 Phone = accountPhone,
-                EmailVerified = string.IsNullOrWhiteSpace(email),
+                EmailVerified = !_requireEmailVerification || string.IsNullOrWhiteSpace(email),
                 BirthDate = birthDate,
                 Role = requestedRole.Value,
                 TermsAcceptedAt = request.AcceptTerms ? DateTime.UtcNow : null,
@@ -210,7 +216,7 @@ namespace Nexo.Api.Controllers
                 _db.Users.Add(user);
                 await _db.SaveChangesAsync();
 
-                if (!string.IsNullOrWhiteSpace(user.Email))
+                if (_requireEmailVerification && !string.IsNullOrWhiteSpace(user.Email))
                 {
                     await SendEmailVerificationCodeAsync(user);
                     await _db.SaveChangesAsync();
