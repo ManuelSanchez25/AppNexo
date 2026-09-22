@@ -52,7 +52,12 @@ namespace Nexo.Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "No se pudo crear un pedido para el usuario {UserId}.", GetAuthenticatedUserId());
+                var rootCause = ex.GetBaseException();
+                _logger.LogError(
+                    "No se pudo crear un pedido para el usuario {UserId}. Causa: {ErrorType}: {ErrorMessage}",
+                    GetAuthenticatedUserId(),
+                    rootCause.GetType().Name,
+                    rootCause.Message);
                 return StatusCode(StatusCodes.Status500InternalServerError,
                     "No pudimos crear el pedido. Inténtalo nuevamente.");
             }
