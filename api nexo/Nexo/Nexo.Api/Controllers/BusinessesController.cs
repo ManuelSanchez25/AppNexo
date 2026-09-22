@@ -12,6 +12,8 @@ namespace Nexo.Api.Controllers
     [Route("api/businesses")]
     public class BusinessesController : ControllerBase
     {
+        private static readonly TimeZoneInfo MexicoCityTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City");
+
         private readonly AppDbContext _db;
 
         public BusinessesController(AppDbContext db)
@@ -313,7 +315,7 @@ namespace Nexo.Api.Controllers
 
             var open = TimeOnly.ParseExact(todaySchedule.OpenTime, "HH:mm");
             var close = TimeOnly.ParseExact(todaySchedule.CloseTime, "HH:mm");
-            var now = TimeOnly.FromDateTime(DateTime.Now);
+            var now = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, MexicoCityTimeZone));
             return now >= open && now < close;
         }
 

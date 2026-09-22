@@ -13,6 +13,8 @@ namespace Nexo.Api.Services
 {
     public class OrderService : IOrderService
     {
+        private static readonly TimeZoneInfo MexicoCityTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City");
+
         private static readonly HashSet<string> AllowedRestaurantStatuses = new(StringComparer.OrdinalIgnoreCase)
         {
             "received",
@@ -659,7 +661,7 @@ namespace Nexo.Api.Services
             if (close <= open)
                 return false;
 
-            var now = TimeOnly.FromDateTime(DateTime.Now);
+            var now = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, MexicoCityTimeZone));
             return now >= open && now < close;
         }
 
@@ -699,7 +701,7 @@ namespace Nexo.Api.Services
 
         private static int TodayNumber()
         {
-            var day = (int)DateTime.Now.DayOfWeek;
+            var day = (int)TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, MexicoCityTimeZone).DayOfWeek;
             return day == 0 ? 7 : day;
         }
 
