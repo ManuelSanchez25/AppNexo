@@ -24,16 +24,13 @@ namespace Nexo.Api.Services
 
         private readonly AppDbContext _db;
         private readonly IOrderRealtimeService _realtimeService;
-        private readonly PushNotificationService _pushNotificationService;
 
         public OrderService(
             AppDbContext db,
-            IOrderRealtimeService realtimeService,
-            PushNotificationService pushNotificationService)
+            IOrderRealtimeService realtimeService)
         {
             _db = db;
             _realtimeService = realtimeService;
-            _pushNotificationService = pushNotificationService;
         }
 
         public async Task<CreateOrderResponse> CreateAsync(
@@ -397,10 +394,6 @@ namespace Nexo.Api.Services
                     order.UserId.Value,
                     order.PublicId,
                     order.Status);
-                await _pushNotificationService.SendOrderStatusAsync(
-                    order.UserId.Value,
-                    order.PublicId,
-                    order.Status);
             }
             await _realtimeService.PublishRestaurantOrdersUpdatedAsync(
                 order.Business.OwnerUserId,
@@ -638,10 +631,6 @@ namespace Nexo.Api.Services
             if (order.UserId.HasValue)
             {
                 await _realtimeService.PublishCustomerOrderUpdatedAsync(
-                    order.UserId.Value,
-                    order.PublicId,
-                    order.Status);
-                await _pushNotificationService.SendOrderStatusAsync(
                     order.UserId.Value,
                     order.PublicId,
                     order.Status);
