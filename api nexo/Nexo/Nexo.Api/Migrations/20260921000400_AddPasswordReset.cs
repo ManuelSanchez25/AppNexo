@@ -1,9 +1,12 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Nexo.Api.Data;
 
 #nullable disable
 
 namespace Nexo.Api.Migrations
 {
+    [DbContext(typeof(AppDbContext))]
     [Migration("20260921000400_AddPasswordReset")]
     public partial class AddPasswordReset : Migration
     {

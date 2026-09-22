@@ -1,10 +1,13 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Nexo.Api.Data;
 
 #nullable disable
 
 namespace Nexo.Api.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(AppDbContext))]
     [Migration("20260824000200_AddBusinessOperatingHoursJson")]
     public partial class AddBusinessOperatingHoursJson : Migration
     {
