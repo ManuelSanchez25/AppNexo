@@ -30,9 +30,11 @@ namespace Nexo.Api.Controllers
         {
             try
             {
+                var clientRequestId = Request.Headers["Idempotency-Key"].ToString();
                 var response = await _orderService.CreateAsync(
                     request,
                     GetAuthenticatedUserId(),
+                    clientRequestId,
                     cancellationToken);
 
                 return Ok(response);

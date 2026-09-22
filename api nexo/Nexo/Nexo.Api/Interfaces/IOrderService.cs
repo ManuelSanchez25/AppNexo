@@ -8,6 +8,7 @@ namespace Nexo.Api.Interfaces
         Task<CreateOrderResponse> CreateAsync(
             CreateOrderRequest request,
             int? userId,
+            string clientRequestId,
             CancellationToken cancellationToken = default);
 
         Task<IReadOnlyList<OrderHistoryItemResponse>> GetHistoryAsync(

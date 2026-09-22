@@ -12,6 +12,7 @@ class OrderApi {
     required List<CartItem> items,
     required String token,
     required int addressId,
+    required String idempotencyKey,
   }) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/api/orders');
     final body = {
@@ -34,6 +35,7 @@ class OrderApi {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
+        'Idempotency-Key': idempotencyKey,
       },
       body: jsonEncode(body),
     );

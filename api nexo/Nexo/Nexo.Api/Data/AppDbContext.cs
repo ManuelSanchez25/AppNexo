@@ -157,6 +157,15 @@ namespace Nexo.Api.Data
                 .IsUnique();
 
             modelBuilder.Entity<Order>()
+                .Property(o => o.ClientRequestId)
+                .HasMaxLength(64);
+
+            modelBuilder.Entity<Order>()
+                .HasIndex(o => new { o.UserId, o.ClientRequestId })
+                .IsUnique()
+                .HasFilter("\"ClientRequestId\" <> ''");
+
+            modelBuilder.Entity<Order>()
                 .Property(o => o.Status)
                 .HasMaxLength(50);
 

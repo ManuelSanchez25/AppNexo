@@ -6,6 +6,7 @@ namespace Nexo.Api.Entitites
     {
         public int Id { get; set; }
         public string PublicId { get; set; } = Guid.NewGuid().ToString();
+        public string ClientRequestId { get; set; } = string.Empty;
         public int BusinessId { get; set; }
         public Business Business { get; set; } = null!;
         public int? UserId { get; set; }

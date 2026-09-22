@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 import 'package:nexo/features/address/data/address_api.dart';
 import 'package:nexo/features/address/presentation/addresses_page.dart';
 import 'package:nexo/features/auth/application/auth_scope.dart';
@@ -19,6 +20,12 @@ class _CartPageState extends State<CartPage> {
   String? _checkoutError;
   List<Address> _addresses = const [];
   Address? _selectedAddress;
+  String? _pendingOrderRequestId;
+
+  String _createOrderRequestId() {
+    final random = Random.secure();
+    return '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-${random.nextInt(1 << 32).toRadixString(36)}';
+  }
 
   Future<void> _ensureAddresses() async {
     final authController = AuthScope.of(context);
@@ -33,14 +40,14 @@ class _CartPageState extends State<CartPage> {
         _addresses = addresses;
         if (_selectedAddress != null) {
           _selectedAddress = addresses.cast<Address?>().firstWhere(
-                (item) => item?.id == _selectedAddress!.id,
-                orElse: () => null,
-              );
+            (item) => item?.id == _selectedAddress!.id,
+            orElse: () => null,
+          );
         }
         _selectedAddress ??= addresses.cast<Address?>().firstWhere(
-              (item) => item?.isDefault == true,
-              orElse: () => addresses.isNotEmpty ? addresses.first : null,
-            );
+          (item) => item?.isDefault == true,
+          orElse: () => addresses.isNotEmpty ? addresses.first : null,
+        );
       });
     } catch (_) {
       if (!mounted) return;
@@ -96,10 +103,7 @@ class _CartPageState extends State<CartPage> {
                       const SizedBox(height: 6),
                       const Text(
                         'Revisa tus productos y confirma cuando todo este listo.',
-                        style: TextStyle(
-                          color: Color(0xFF666666),
-                          height: 1.4,
-                        ),
+                        style: TextStyle(color: Color(0xFF666666), height: 1.4),
                       ),
                       const SizedBox(height: 18),
                       GestureDetector(
@@ -124,7 +128,8 @@ class _CartPageState extends State<CartPage> {
                                 token: token,
                                 suggestedRecipientName: authController.userName,
                                 selectionMode: true,
-                                initiallySelectedAddressId: _selectedAddress?.id,
+                                initiallySelectedAddressId:
+                                    _selectedAddress?.id,
                               ),
                             ),
                           );
@@ -193,7 +198,9 @@ class _CartPageState extends State<CartPage> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: const Color(0x14F2C21A),
-                                            borderRadius: BorderRadius.circular(999),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
                                             border: Border.all(
                                               color: const Color(0x22F2C21A),
                                             ),
@@ -238,7 +245,8 @@ class _CartPageState extends State<CartPage> {
                       Expanded(
                         child: ListView.separated(
                           itemCount: cartController.items.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
                           itemBuilder: (context, index) {
                             final item = cartController.items[index];
                             final itemSubtotal = item.unitPrice * item.quantity;
@@ -247,7 +255,9 @@ class _CartPageState extends State<CartPage> {
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(22),
-                                border: Border.all(color: const Color(0x14F2C21A)),
+                                border: Border.all(
+                                  color: const Color(0x14F2C21A),
+                                ),
                                 boxShadow: const [
                                   BoxShadow(
                                     color: Color(0x08000000),
@@ -281,7 +291,9 @@ class _CartPageState extends State<CartPage> {
                                             color: Color(0xFF777777),
                                           ),
                                         ),
-                                        if (item.customizationSummary.isNotEmpty) ...[
+                                        if (item
+                                            .customizationSummary
+                                            .isNotEmpty) ...[
                                           const SizedBox(height: 8),
                                           Text(
                                             item.customizationSummary,
@@ -306,7 +318,9 @@ class _CartPageState extends State<CartPage> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color(0x14F2C21A),
-                                          borderRadius: BorderRadius.circular(999),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
                                           border: Border.all(
                                             color: const Color(0x22F2C21A),
                                           ),
@@ -363,7 +377,8 @@ class _CartPageState extends State<CartPage> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: cartController.isEmpty ||
+                          onPressed:
+                              cartController.isEmpty ||
                                   _submitting ||
                                   _selectedAddress == null
                               ? null
@@ -386,9 +401,12 @@ class _CartPageState extends State<CartPage> {
                                       items: cartController.items,
                                       token: token,
                                       addressId: _selectedAddress!.id,
+                                      idempotencyKey: _pendingOrderRequestId ??=
+                                          _createOrderRequestId(),
                                     );
                                     if (!pageContext.mounted) return;
                                     cartController.clear();
+                                    _pendingOrderRequestId = null;
                                     Navigator.of(context).pop();
                                     Navigator.of(pageContext).pushReplacement(
                                       MaterialPageRoute(
@@ -401,7 +419,8 @@ class _CartPageState extends State<CartPage> {
                                           total: response.total,
                                           deliveryLabel: response.deliveryLabel,
                                           recipientName: response.recipientName,
-                                          recipientPhone: response.recipientPhone,
+                                          recipientPhone:
+                                              response.recipientPhone,
                                           deliveryAddressText:
                                               response.deliveryAddressText,
                                         ),
@@ -454,9 +473,7 @@ class _CartPageState extends State<CartPage> {
     final cartController = CartScope.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Carrito'),
-      ),
+      appBar: AppBar(title: const Text('Carrito')),
       body: cartController.isEmpty
           ? const _EmptyCartState()
           : ListView(
@@ -645,9 +662,7 @@ class _CartPageState extends State<CartPage> {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                border: Border(
-                  top: BorderSide(color: Color(0x14F2C21A)),
-                ),
+                border: Border(top: BorderSide(color: Color(0x14F2C21A))),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -657,10 +672,7 @@ class _CartPageState extends State<CartPage> {
                     value: cartController.subtotal,
                   ),
                   const SizedBox(height: 8),
-                  _SummaryRow(
-                    label: 'Envio',
-                    value: cartController.shipping,
-                  ),
+                  _SummaryRow(label: 'Envio', value: cartController.shipping),
                   const SizedBox(height: 12),
                   _SummaryRow(
                     label: 'Total',
@@ -692,10 +704,7 @@ class _HeroMetric extends StatelessWidget {
   final String label;
   final String value;
 
-  const _HeroMetric({
-    required this.label,
-    required this.value,
-  });
+  const _HeroMetric({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -720,10 +729,7 @@ class _HeroMetric extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(
-                color: Color(0xFFD3D0CB),
-                fontSize: 12,
-              ),
+              style: const TextStyle(color: Color(0xFFD3D0CB), fontSize: 12),
             ),
           ],
         ),

@@ -22,6 +22,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _nameCtrl = TextEditingController();
   final _contactCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _confirmPassCtrl = TextEditingController();
   final _birthDateCtrl = TextEditingController();
   final _driverFullNameCtrl = TextEditingController();
   final _driverPhoneCtrl = TextEditingController();
@@ -40,6 +41,7 @@ class _RegisterPageState extends State<RegisterPage> {
   String? _nameError;
   String? _emailError;
   String? _passError;
+  String? _confirmPassError;
   String? _driverError;
   bool _termsError = false;
   bool _isLoading = false;
@@ -57,6 +59,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _nameCtrl.dispose();
     _contactCtrl.dispose();
     _passCtrl.dispose();
+    _confirmPassCtrl.dispose();
     _birthDateCtrl.dispose();
     _driverFullNameCtrl.dispose();
     _driverPhoneCtrl.dispose();
@@ -99,6 +102,7 @@ class _RegisterPageState extends State<RegisterPage> {
     final email = isEmail ? contact : '';
     final phone = isEmail ? '' : contact;
     final pass = _passCtrl.text;
+    final confirmPass = _confirmPassCtrl.text;
     final authController = AuthScope.of(context);
 
     var isValid = true;
@@ -153,6 +157,16 @@ class _RegisterPageState extends State<RegisterPage> {
       isValid = false;
     } else {
       _passError = null;
+    }
+
+    if (confirmPass.isEmpty) {
+      _confirmPassError = 'Confirma tu contraseña';
+      isValid = false;
+    } else if (confirmPass != pass) {
+      _confirmPassError = 'Las contraseñas no coinciden';
+      isValid = false;
+    } else {
+      _confirmPassError = null;
     }
 
     if (_birthDate == null) {
@@ -506,6 +520,18 @@ class _RegisterPageState extends State<RegisterPage> {
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
                         errorText: _passError,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _confirmPassCtrl,
+                      obscureText: true,
+                      maxLength: 20,
+                      onChanged: (_) =>
+                          setState(() => _confirmPassError = null),
+                      decoration: InputDecoration(
+                        labelText: 'Confirmar contraseña',
+                        errorText: _confirmPassError,
                       ),
                     ),
                     Container(

@@ -39,6 +39,7 @@ namespace Nexo.Api.Services
         public async Task<CreateOrderResponse> CreateAsync(
             CreateOrderRequest request,
             int? userId,
+            string clientRequestId,
             CancellationToken cancellationToken = default)
         {
             if (request.Items == null || request.Items.Count == 0)
@@ -51,11 +52,24 @@ namespace Nexo.Api.Services
                 throw new InvalidOperationException("La cantidad de cada producto debe estar entre 1 y 20.");
             if (!userId.HasValue)
                 throw new InvalidOperationException("No encontramos un usuario autenticado para esta orden.");
+            if (string.IsNullOrWhiteSpace(clientRequestId) || clientRequestId.Length > 64)
+                throw new InvalidOperationException("No se pudo validar esta solicitud. Intenta confirmar el pedido nuevamente.");
 
             var userExists = await _db.Users
                 .AnyAsync(u => u.Id == userId.Value, cancellationToken);
             if (!userExists)
                 throw new InvalidOperationException("El usuario asociado a la orden no existe.");
+
+            var existingOrderId = await _db.Orders
+                .AsNoTracking()
+                .Where(o => o.UserId == userId.Value && o.ClientRequestId == clientRequestId)
+                .Select(o => (int?)o.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (existingOrderId.HasValue)
+            {
+                return await GetOrderResponseByIdAsync(existingOrderId.Value, cancellationToken)
+                    ?? throw new InvalidOperationException("No se pudo recuperar el pedido ya creado.");
+            }
 
             var address = await _db.Addresses
                 .AsNoTracking()
@@ -159,6 +173,7 @@ namespace Nexo.Api.Services
             {
                 BusinessId = businessIds[0],
                 UserId = userId,
+                ClientRequestId = clientRequestId,
                 AddressId = address.Id,
                 Status = "received",
                 DeliveryPin = RandomNumberGenerator.GetInt32(0, 10000).ToString("D4"),
