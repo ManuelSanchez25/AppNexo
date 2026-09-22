@@ -75,6 +75,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddSingleton<IOrderRealtimeService, OrderRealtimeService>();
 builder.Services.AddScoped<EmailVerificationService>();
+builder.Services.AddScoped<PushNotificationService>();
 
 var app = builder.Build();
 
