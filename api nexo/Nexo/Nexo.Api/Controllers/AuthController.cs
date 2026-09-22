@@ -204,6 +204,7 @@ namespace Nexo.Api.Controllers
 
             user.PasswordHash = _hasher.HashPassword(user, request.Password);
 
+            await using var transaction = await _db.Database.BeginTransactionAsync();
             try
             {
                 _db.Users.Add(user);
@@ -214,14 +215,19 @@ namespace Nexo.Api.Controllers
                     await SendEmailVerificationCodeAsync(user);
                     await _db.SaveChangesAsync();
                 }
+
+                await transaction.CommitAsync();
             }
             catch (DbUpdateException)
             {
+                await transaction.RollbackAsync();
                 return Conflict("El usuario, correo o celular ya está registrado.");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return Problem(ex.Message);
+                await transaction.RollbackAsync();
+                return StatusCode(503,
+                    "No pudimos enviar el correo de verificación. Inténtalo nuevamente en un momento.");
             }
 
             var loginResponse = ToLoginResponse(user);

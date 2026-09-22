@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:http/http.dart' as http;
 import 'package:nexo/config/api_config.dart';
@@ -26,29 +27,36 @@ class AuthApi {
   }) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/api/auth/register');
 
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'phone': phone,
-        'password': password,
-        'birthDate': birthDate.toIso8601String(),
-        'role': role,
-        'acceptTerms': acceptTerms,
-        'driverFullName': driverFullName,
-        'driverPhone': driverPhone,
-        'driverVehicleType': driverVehicleType,
-        'driverVehicleMakeModel': driverVehicleMakeModel,
-        'driverVehicleColor': driverVehicleColor,
-        'driverVehiclePlate': driverVehiclePlate,
-        'driverLicenseType': driverLicenseType,
-        'driverLicenseNumber': driverLicenseNumber,
-        'driverIdentityType': driverIdentityType,
-        'driverIdentityDocument': driverIdentityDocument,
-      }),
-    );
+    final response = await http
+        .post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'name': name,
+            'email': email,
+            'phone': phone,
+            'password': password,
+            'birthDate': birthDate.toIso8601String(),
+            'role': role,
+            'acceptTerms': acceptTerms,
+            'driverFullName': driverFullName,
+            'driverPhone': driverPhone,
+            'driverVehicleType': driverVehicleType,
+            'driverVehicleMakeModel': driverVehicleMakeModel,
+            'driverVehicleColor': driverVehicleColor,
+            'driverVehiclePlate': driverVehiclePlate,
+            'driverLicenseType': driverLicenseType,
+            'driverLicenseNumber': driverLicenseNumber,
+            'driverIdentityType': driverIdentityType,
+            'driverIdentityDocument': driverIdentityDocument,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 25),
+          onTimeout: () => throw TimeoutException(
+            'El servidor tardó demasiado. Inténtalo nuevamente.',
+          ),
+        );
 
     if (response.statusCode == 200) {
       final json = jsonDecode(response.body) as Map<String, dynamic>;
@@ -59,7 +67,12 @@ class AuthApi {
       throw Exception(response.body.replaceAll('"', ''));
     }
 
-    throw Exception('Error ${response.statusCode}: ${response.body}');
+    final message = response.body.replaceAll('"', '').trim();
+    throw Exception(
+      message.isEmpty
+          ? 'No pudimos crear la cuenta. Inténtalo nuevamente.'
+          : message,
+    );
   }
 
   static Future<LoginResponse> login({
