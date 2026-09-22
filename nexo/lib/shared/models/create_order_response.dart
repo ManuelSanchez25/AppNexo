@@ -1,7 +1,11 @@
 class CreateOrderResponse {
   final String orderId;
   final int businessId;
+  final int? driverUserId;
   final String status;
+  final String deliveryPin;
+  final String cancelledBy;
+  final String cancellationReason;
   final double subtotal;
   final double shipping;
   final double total;
@@ -11,12 +15,17 @@ class CreateOrderResponse {
   final String recipientPhone;
   final String deliveryAddressText;
   final DateTime? createdAt;
+  final DateTime? deliveredAt;
   final List<CreateOrderItemResponse> items;
 
   CreateOrderResponse({
     required this.orderId,
     required this.businessId,
+    required this.driverUserId,
     required this.status,
+    this.deliveryPin = '',
+    this.cancelledBy = '',
+    this.cancellationReason = '',
     required this.subtotal,
     required this.shipping,
     required this.total,
@@ -26,6 +35,7 @@ class CreateOrderResponse {
     required this.recipientPhone,
     required this.deliveryAddressText,
     required this.createdAt,
+    this.deliveredAt,
     required this.items,
   });
 
@@ -33,7 +43,11 @@ class CreateOrderResponse {
     return CreateOrderResponse(
       orderId: (json['orderId'] ?? '').toString(),
       businessId: (json['businessId'] ?? 0) as int,
+      driverUserId: json['driverUserId'] as int?,
       status: (json['status'] ?? '') as String,
+      deliveryPin: (json['deliveryPin'] ?? '') as String,
+      cancelledBy: (json['cancelledBy'] ?? '') as String,
+      cancellationReason: (json['cancellationReason'] ?? '') as String,
       subtotal: ((json['subtotal'] ?? 0) as num).toDouble(),
       shipping: ((json['shipping'] ?? 0) as num).toDouble(),
       total: ((json['total'] ?? 0) as num).toDouble(),
@@ -45,10 +59,12 @@ class CreateOrderResponse {
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
+      deliveredAt: json['deliveredAt'] != null
+          ? DateTime.tryParse(json['deliveredAt'].toString())
+          : null,
       items: ((json['items'] ?? const []) as List)
           .map(
-            (e) =>
-                CreateOrderItemResponse.fromJson(e as Map<String, dynamic>),
+            (e) => CreateOrderItemResponse.fromJson(e as Map<String, dynamic>),
           )
           .toList(),
     );

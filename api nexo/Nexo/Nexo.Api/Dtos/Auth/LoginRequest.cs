@@ -2,7 +2,7 @@
 {
     public class LoginRequest
     {
-        public string Identifier { get; set; } = ""; // username o email
+        public string Identifier { get; set; } = ""; // username, email o telefono
         public string Password { get; set; } = "";
     }
 }

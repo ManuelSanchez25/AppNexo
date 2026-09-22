@@ -21,7 +21,9 @@ class OrderApi {
             (item) => {
               'productId': item.id,
               'quantity': item.quantity,
-              'selectedOptionIds': item.selectedOptions.map((option) => option.id).toList(),
+              'selectedOptionIds': item.selectedOptions
+                  .map((option) => option.id)
+                  .toList(),
             },
           )
           .toList(),
@@ -83,6 +85,25 @@ class OrderApi {
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     return CreateOrderResponse.fromJson(json);
+  }
+
+  static Future<void> cancelOrder({
+    required String token,
+    required String orderId,
+    required String reason,
+  }) async {
+    final response = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/orders/$orderId/cancel'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'reason': reason}),
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception(response.body.replaceAll('"', ''));
+    }
   }
 
   static Future<List<RestaurantOrderSummary>> getRestaurantOrders({

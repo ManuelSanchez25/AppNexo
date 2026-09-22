@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nexo/features/auth/application/auth_scope.dart';
+import 'package:nexo/features/restaurant/application/catalog_refresh_controller.dart';
 import 'package:nexo/features/restaurant/data/product_api.dart';
 import 'package:nexo/shared/models/business.dart';
 import 'package:nexo/shared/models/product.dart';
@@ -32,9 +33,8 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
 
   String? get _token => AuthScope.of(context).token;
 
-  List<ProductOptionGroup> get _availableReusableGroups => _businessGroups
-      .where((group) => !group.isAssignedToProduct)
-      .toList();
+  List<ProductOptionGroup> get _availableReusableGroups =>
+      _businessGroups.where((group) => !group.isAssignedToProduct).toList();
 
   @override
   void didChangeDependencies() {
@@ -82,6 +82,10 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
     }
   }
 
+  void _markCatalogChanged() {
+    CatalogRefreshController.instance.catalogChanged();
+  }
+
   Future<void> _openGroupDialog([ProductOptionGroup? group]) async {
     final nameController = TextEditingController(text: group?.name ?? '');
     final minController = TextEditingController(
@@ -102,7 +106,9 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(28),
               ),
-              title: Text(group == null ? 'Nuevo grupo reusable' : 'Editar grupo'),
+              title: Text(
+                group == null ? 'Nuevo grupo reusable' : 'Editar grupo',
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -197,13 +203,14 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                             }
 
                             if (!context.mounted) return;
+                            _markCatalogChanged();
                             Navigator.pop(context);
                             await _reloadAll();
                           } catch (error) {
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('$error')),
-                            );
+                            ScaffoldMessenger.of(
+                              context,
+                            ).showSnackBar(SnackBar(content: Text('$error')));
                           } finally {
                             if (context.mounted) {
                               setDialogState(() => submitted = false);
@@ -254,8 +261,9 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: priceController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Precio extra',
                         prefixText: '\$ ',
@@ -317,13 +325,14 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                             }
 
                             if (!context.mounted) return;
+                            _markCatalogChanged();
                             Navigator.pop(context);
                             await _reloadAll();
                           } catch (error) {
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('$error')),
-                            );
+                            ScaffoldMessenger.of(
+                              context,
+                            ).showSnackBar(SnackBar(content: Text('$error')));
                           } finally {
                             if (context.mounted) {
                               setDialogState(() => submitted = false);
@@ -455,11 +464,13 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                                           productId: _product.id,
                                           groupId: group.id,
                                         );
+                                        _markCatalogChanged();
                                         await _reloadAll();
                                       } catch (error) {
                                         if (!mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(content: Text('$error')),
                                         );
                                       } finally {
@@ -496,12 +507,13 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
         productId: _product.id,
         groupId: group.id,
       );
+      _markCatalogChanged();
       await _reloadAll();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$error')));
     } finally {
       if (mounted) {
         setState(() => _working = false);
@@ -512,9 +524,7 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_product.name),
-      ),
+      appBar: AppBar(title: Text(_product.name)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -571,7 +581,9 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                           children: [
                             Expanded(
                               child: FilledButton(
-                                onPressed: _working ? null : () => _openGroupDialog(),
+                                onPressed: _working
+                                    ? null
+                                    : () => _openGroupDialog(),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: Colors.white,
                                   foregroundColor: Colors.black,
@@ -582,7 +594,9 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: _working ? null : _attachExistingGroup,
+                                onPressed: _working
+                                    ? null
+                                    : _attachExistingGroup,
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: Colors.white,
                                   side: const BorderSide(color: Colors.white24),
@@ -665,7 +679,8 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         group.name,
@@ -685,8 +700,7 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                                                 : 'Opcional',
                                           ),
                                           _InlineTag(
-                                            label:
-                                                'Min ${group.minSelections}',
+                                            label: 'Min ${group.minSelections}',
                                           ),
                                           _InlineTag(
                                             label: group.maxSelections == 0
@@ -782,8 +796,9 @@ class _ProductOptionsPageState extends State<ProductOptionsPage> {
                                           color: option.isAvailable
                                               ? const Color(0xFFEAF7EE)
                                               : const Color(0xFFFCE9E7),
-                                          borderRadius:
-                                              BorderRadius.circular(999),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
                                         ),
                                         child: Text(
                                           option.isAvailable
@@ -822,10 +837,7 @@ class _MetricCard extends StatelessWidget {
   final String label;
   final String value;
 
-  const _MetricCard({
-    required this.label,
-    required this.value,
-  });
+  const _MetricCard({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -915,10 +927,7 @@ class _EmptyPanel extends StatelessWidget {
           Text(
             description,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF666666),
-              height: 1.45,
-            ),
+            style: const TextStyle(color: Color(0xFF666666), height: 1.45),
           ),
         ],
       ),

@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:nexo/features/auth/application/auth_scope.dart';
 import 'package:nexo/features/auth/data/auth_api.dart';
+import 'package:nexo/features/auth/data/google_auth_service.dart';
+import 'package:nexo/features/auth/presentation/email_verification_page.dart';
+import 'package:nexo/features/auth/presentation/forgot_password_page.dart';
+import 'package:nexo/features/auth/presentation/google_sign_in_button.dart';
 import 'package:nexo/features/auth/presentation/register_page.dart';
 import 'package:nexo/features/auth/presentation/session_home_page.dart';
 import 'package:nexo/theme/app_buttons.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,19 +19,19 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
-  String? _emailError;
+  String? _identifierError;
   String? _passwordError;
-  final TextEditingController _emailCtrl = TextEditingController();
+  final TextEditingController _identifierCtrl = TextEditingController();
   final TextEditingController _passCtrl = TextEditingController();
 
-  bool _validateInputs(String email, String password) {
+  bool _validateInputs(String identifier, String password) {
     var isValid = true;
 
-    if (email.isEmpty) {
-      _emailError = 'Escribe tu correo o usuario';
+    if (identifier.isEmpty) {
+      _identifierError = 'Escribe tu correo, telefono o usuario';
       isValid = false;
     } else {
-      _emailError = null;
+      _identifierError = null;
     }
 
     if (password.isEmpty) {
@@ -44,26 +49,26 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _onLoginPressed() async {
-    final email = _emailCtrl.text.trim();
+    final identifier = _identifierCtrl.text.trim();
     final password = _passCtrl.text;
     final authController = AuthScope.of(context);
 
-    if (!_validateInputs(email, password)) return;
+    if (!_validateInputs(identifier, password)) return;
 
     setState(() => _isLoading = true);
 
     try {
       final user = await AuthApi.login(
-        identifier: email,
+        identifier: identifier,
         password: password,
       );
 
       if (!mounted) return;
 
       authController.setSession(user);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Bienvenido ${user.name}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Bienvenido ${user.name}')));
 
       Navigator.pushAndRemoveUntil(
         context,
@@ -73,34 +78,61 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceAll('Exception:', '').trim(),
+      final message = e.toString().replaceAll('Exception:', '').trim();
+      if (message.toLowerCase().contains('verifica tu correo') &&
+          identifier.contains('@')) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationPage(email: identifier),
           ),
-        ),
-      );
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _onGoogleLogin(GoogleSignInAccount account) async {
+    final authController = AuthScope.of(context);
+    final session = await AuthApi.googleLogin(
+      idToken: GoogleAuthService.idTokenFrom(account),
+      role: 'client',
+    );
+
+    if (!mounted) return;
+
+    authController.setSession(session);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Bienvenido ${session.name}')));
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const SessionHomePage()),
+      (route) => false,
+    );
+  }
+
   void _openRegister(AccountType type) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => RegisterPage(initialAccountType: type),
-      ),
+      MaterialPageRoute(builder: (_) => RegisterPage(initialAccountType: type)),
     );
-    _emailCtrl.clear();
+    _identifierCtrl.clear();
     _passCtrl.clear();
-    _emailError = null;
+    _identifierError = null;
     _passwordError = null;
   }
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+    _identifierCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
   }
@@ -208,7 +240,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Entra con tu correo o usuario para continuar.',
+                          'Entra con tu correo, telefono o usuario para continuar.',
                           style: TextStyle(
                             fontSize: 14,
                             color: Color(0xFF666666),
@@ -217,13 +249,13 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 22),
                         TextField(
-                          controller: _emailCtrl,
-                          keyboardType: TextInputType.emailAddress,
+                          controller: _identifierCtrl,
+                          keyboardType: TextInputType.text,
                           autocorrect: false,
                           enableSuggestions: false,
                           decoration: InputDecoration(
-                            labelText: 'Correo o usuario',
-                            errorText: _emailError,
+                            labelText: 'Correo o telefono',
+                            errorText: _identifierError,
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -237,7 +269,24 @@ class _LoginPageState extends State<LoginPage> {
                             errorText: _passwordError,
                           ),
                         ),
-                        const SizedBox(height: 26),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _isLoading
+                                ? null
+                                : () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ForgotPasswordPage(
+                                        initialEmail: _identifierCtrl.text
+                                            .trim(),
+                                      ),
+                                    ),
+                                  ),
+                            child: const Text('¿Olvidaste tu contraseña?'),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
                         ElevatedButton(
                           style: AppButtons.primary,
                           onPressed: _isLoading ? null : _onLoginPressed,
@@ -245,9 +294,27 @@ class _LoginPageState extends State<LoginPage> {
                               ? const SizedBox(
                                   height: 18,
                                   width: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text('Entrar'),
+                        ),
+                        const SizedBox(height: 12),
+                        GoogleSignInButton(
+                          label: 'Entrar con Google',
+                          enabled: !_isLoading,
+                          onSignedIn: _onGoogleLogin,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Si es tu primera vez con Google, crea la cuenta abajo para registrar fecha y tipo de cuenta.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF777777),
+                            height: 1.35,
+                          ),
                         ),
                         const SizedBox(height: 18),
                         const Text(
@@ -263,15 +330,25 @@ class _LoginPageState extends State<LoginPage> {
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () => _openRegister(AccountType.client),
+                                onPressed: () =>
+                                    _openRegister(AccountType.client),
                                 child: const Text('Cliente'),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () => _openRegister(AccountType.restaurant),
+                                onPressed: () =>
+                                    _openRegister(AccountType.restaurant),
                                 child: const Text('Restaurante'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    _openRegister(AccountType.driver),
+                                child: const Text('Repartidor'),
                               ),
                             ),
                           ],

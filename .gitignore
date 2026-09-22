@@ -1,0 +1,16 @@
+
+# Local SMTP secrets
+api nexo/Nexo/Nexo.Api/scripts/run-with-gmail-smtp.local.sh
+
+# Local secrets and generated files
+**/.env
+**/.env.*
+!**/.env.example
+**/bin/
+**/obj/
+**/.vs/
+**/publish/
+**/build-check*/
+*.user
+*.suo
+.DS_Store

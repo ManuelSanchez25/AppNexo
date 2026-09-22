@@ -44,13 +44,17 @@ class _OrdersHistoryPageState extends State<OrdersHistoryPage>
 
   Future<void> _reload() async {
     final future = _loadOrders();
-    setState(() => _future = future);
+    setState(() {
+      _future = future;
+    });
     await future;
   }
 
   Future<void> _reloadSilently() async {
     if (!mounted) return;
-    setState(() => _future = _loadOrders());
+    setState(() {
+      _future = _loadOrders();
+    });
   }
 
   @override
@@ -163,7 +167,10 @@ class _OrdersHistoryPageState extends State<OrdersHistoryPage>
                         ),
                       ),
                       const SizedBox(height: 18),
-                      _MiniMetric(value: orders.length.toString(), label: 'Pedidos'),
+                      _MiniMetric(
+                        value: orders.length.toString(),
+                        label: 'Pedidos',
+                      ),
                     ],
                   ),
                 ),
@@ -198,7 +205,8 @@ class _OrdersHistoryPageState extends State<OrdersHistoryPage>
                                   deliveryLabel: detail.deliveryLabel,
                                   recipientName: detail.recipientName,
                                   recipientPhone: detail.recipientPhone,
-                                  deliveryAddressText: detail.deliveryAddressText,
+                                  deliveryAddressText:
+                                      detail.deliveryAddressText,
                                 ),
                               ),
                             );
@@ -285,10 +293,7 @@ class _MiniMetric extends StatelessWidget {
   final String value;
   final String label;
 
-  const _MiniMetric({
-    required this.value,
-    required this.label,
-  });
+  const _MiniMetric({required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -311,10 +316,7 @@ class _MiniMetric extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(color: Color(0xFFD3D0CB)),
-          ),
+          Text(label, style: const TextStyle(color: Color(0xFFD3D0CB))),
         ],
       ),
     );
@@ -331,6 +333,8 @@ class _StatusChip extends StatelessWidget {
     final label = switch (status) {
       'preparing' => 'Preparando',
       'ready' => 'Listo',
+      'driver_assigned' => 'Por recoger',
+      'on_the_way' => 'En camino',
       'delivered' => 'Entregado',
       'cancelled' => 'Cancelado',
       _ => 'Recibido',
@@ -376,11 +380,7 @@ class _EmptyOrdersState extends StatelessWidget {
       ),
       child: const Column(
         children: [
-          Icon(
-            Icons.receipt_long_rounded,
-            size: 46,
-            color: Color(0xFFF2C21A),
-          ),
+          Icon(Icons.receipt_long_rounded, size: 46, color: Color(0xFFF2C21A)),
           SizedBox(height: 14),
           Text(
             'Aun no tienes pedidos',

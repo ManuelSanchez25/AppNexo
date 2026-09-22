@@ -19,6 +19,17 @@ class BusinessApi {
         .toList();
   }
 
+  static Future<Business> getBusinessById(int businessId) async {
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/businesses/$businessId');
+    final response = await http.get(url);
+
+    if (response.statusCode != 200) {
+      throw Exception('Error ${response.statusCode}: ${response.body}');
+    }
+
+    return Business.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   static Future<List<Business>> getOwnedBusinesses(String token) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/api/businesses/owned');
     final response = await http.get(
@@ -44,6 +55,10 @@ class BusinessApi {
     required double rating,
     required String imageUrl,
     required String addressText,
+    required String openTime,
+    required String closeTime,
+    required String openDays,
+    required List<BusinessOperatingHour> operatingHours,
     double? latitude,
     double? longitude,
     required double deliveryRadiusKm,
@@ -62,6 +77,10 @@ class BusinessApi {
         'rating': rating,
         'imageUrl': imageUrl,
         'addressText': addressText,
+        'openTime': openTime,
+        'closeTime': closeTime,
+        'openDays': openDays,
+        'operatingHours': operatingHours.map((hour) => hour.toJson()).toList(),
         'latitude': latitude,
         'longitude': longitude,
         'deliveryRadiusKm': deliveryRadiusKm,
@@ -84,6 +103,10 @@ class BusinessApi {
     required double rating,
     required String imageUrl,
     required String addressText,
+    required String openTime,
+    required String closeTime,
+    required String openDays,
+    required List<BusinessOperatingHour> operatingHours,
     double? latitude,
     double? longitude,
     required double deliveryRadiusKm,
@@ -102,10 +125,62 @@ class BusinessApi {
         'rating': rating,
         'imageUrl': imageUrl,
         'addressText': addressText,
+        'openTime': openTime,
+        'closeTime': closeTime,
+        'openDays': openDays,
+        'operatingHours': operatingHours.map((hour) => hour.toJson()).toList(),
         'latitude': latitude,
         'longitude': longitude,
         'deliveryRadiusKm': deliveryRadiusKm,
       }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Error ${response.statusCode}: ${response.body}');
+    }
+
+    return Business.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  static Future<Business> updateApproval({
+    required String token,
+    required int businessId,
+    required String status,
+  }) async {
+    final url = Uri.parse(
+      '${ApiConfig.baseUrl}/api/businesses/$businessId/approval',
+    );
+    final response = await http.patch(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'status': status}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Error ${response.statusCode}: ${response.body}');
+    }
+
+    return Business.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  static Future<Business> updateAvailability({
+    required String token,
+    required int businessId,
+    required bool isPaused,
+  }) async {
+    final url = Uri.parse(
+      '${ApiConfig.baseUrl}/api/businesses/$businessId/availability',
+    );
+    final response = await http.patch(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'isPaused': isPaused}),
     );
 
     if (response.statusCode != 200) {

@@ -1,5 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nexo/features/auth/presentation/account_page.dart';
+import 'package:nexo/features/notifications/application/notification_scope.dart';
+import 'package:nexo/features/notifications/presentation/notifications_page.dart';
+import 'package:nexo/features/orders/application/active_order_scope.dart';
+import 'package:nexo/features/orders/presentation/active_order_floating_card.dart';
+import 'package:nexo/features/orders/presentation/order_received_page.dart';
+import 'package:nexo/features/restaurant/application/catalog_refresh_controller.dart';
 import 'package:nexo/features/restaurant/data/business_api.dart';
 import 'package:nexo/shared/models/business.dart';
 import 'package:nexo/shared/widgets/business_card.dart';
@@ -12,27 +20,64 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int _navIndex = 0;
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
   Future<void>? _loadFuture;
   List<Business> _allBusinesses = [];
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    CatalogRefreshController.instance.addListener(_onCatalogChanged);
     _loadFuture = _loadBusinesses();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _reloadSilently(),
+    );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
+    CatalogRefreshController.instance.removeListener(_onCatalogChanged);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadBusinesses() async {
     _allBusinesses = await BusinessApi.getBusinesses();
+  }
+
+  Future<void> _reloadBusinesses() async {
+    final future = _loadBusinesses();
+    setState(() {
+      _loadFuture = future;
+    });
+    await future;
+  }
+
+  void _reloadSilently() {
+    if (!mounted) return;
+    final future = _loadBusinesses();
+    setState(() {
+      _loadFuture = future;
+    });
+  }
+
+  void _onCatalogChanged() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reloadSilently());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _reloadSilently();
+    }
   }
 
   List<Business> get filteredBusinesses {
@@ -48,230 +93,317 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final activeOrderController = ActiveOrderScope.of(context);
+    final notificationController = NotificationScope.of(context);
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        activeOrderController,
+        notificationController,
+      ]),
+      builder: (context, child) {
+        final activeOrder = activeOrderController.activeOrder;
+        final unreadCount = notificationController.unreadCount;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nexo'),
-        actions: const [CartIcon()],
-      ),
-      body: FutureBuilder<void>(
-        future: _loadFuture,
-        builder: (context, snapshot) {
-          if (_loadFuture == null ||
-              snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Nexo'),
+            actions: const [CartIcon()],
+          ),
+          body: FutureBuilder<void>(
+            future: _loadFuture,
+            builder: (context, snapshot) {
+              if (_loadFuture == null ||
+                  snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              }
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 26),
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(32),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF090909),
-                      Color(0xFF111111),
-                      Color(0xFF1B1A16),
-                    ],
-                  ),
-                  border: Border.all(color: const Color(0x33F2C21A)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x22000000),
-                      blurRadius: 28,
-                      offset: Offset(0, 14),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              return RefreshIndicator(
+                onRefresh: _reloadBusinesses,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 26),
+                  physics: const AlwaysScrollableScrollPhysics(),
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
+                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: const Color(0x14F2C21A),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: const Color(0x4DF2C21A)),
+                        borderRadius: BorderRadius.circular(32),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF090909),
+                            Color(0xFF111111),
+                            Color(0xFF1B1A16),
+                          ],
+                        ),
+                        border: Border.all(color: const Color(0x33F2C21A)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x22000000),
+                            blurRadius: 28,
+                            offset: Offset(0, 14),
+                          ),
+                        ],
                       ),
-                      child: const Text(
-                        'NEXO SELECT',
-                        style: TextStyle(
-                          color: Color(0xFFF2C21A),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          letterSpacing: 0.8,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0x14F2C21A),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: const Color(0x4DF2C21A),
+                              ),
+                            ),
+                            child: const Text(
+                              'NEXO',
+                              style: TextStyle(
+                                color: Color(0xFFF2C21A),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            'Conecta, pide, llega.',
+                            style: TextStyle(
+                              fontSize: 31,
+                              fontWeight: FontWeight.w800,
+                              height: 1.03,
+                              letterSpacing: -1,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Todo lo que necesitas a un toque de distancia',
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.5,
+                              color: Color(0xFFD8D4CB),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              _HeroMetric(
+                                label: 'Negocios',
+                                value: _allBusinesses.length.toString(),
+                              ),
+                              const SizedBox(width: 10),
+                              const _HeroMetric(label: 'Estilo', value: 'NEXO'),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0x14F2C21A)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x10000000),
+                            blurRadius: 18,
+                            offset: Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchCtrl,
+                        onChanged: (value) => setState(() => _query = value),
+                        decoration: const InputDecoration(
+                          hintText: 'Buscar negocio o categoria',
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            color: Color(0xFFF2C21A),
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Pide con una presencia mas limpia, seria y moderna.',
-                      style: TextStyle(
-                        fontSize: 31,
-                        fontWeight: FontWeight.w800,
-                        height: 1.03,
-                        letterSpacing: -1,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Explora negocios bien presentados, personaliza tus productos y confirma pedidos en una experiencia mas premium.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: Color(0xFFD8D4CB),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 24),
                     Row(
                       children: [
-                        _HeroMetric(
-                          label: 'Negocios',
-                          value: _allBusinesses.length.toString(),
+                        Expanded(
+                          child: Text(
+                            'Negocios disponibles',
+                            style: textTheme.titleLarge,
+                          ),
                         ),
-                        const SizedBox(width: 10),
-                        const _HeroMetric(
-                          label: 'Estilo',
-                          value: 'NEXO',
+                        Text(
+                          '${filteredBusinesses.length} resultados',
+                          style: textTheme.bodyMedium,
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0x14F2C21A)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x10000000),
-                      blurRadius: 18,
-                      offset: Offset(0, 10),
+                    const SizedBox(height: 12),
+                    if (filteredBusinesses.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(color: const Color(0x14F2C21A)),
+                        ),
+                        child: const Text(
+                          'No encontramos negocios con esa busqueda.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF666666),
+                          ),
+                        ),
+                      ),
+                    ...filteredBusinesses.map(
+                      (business) => Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: BusinessCard(
+                          businessId: business.id,
+                          name: business.name,
+                          description: business.description,
+                          time: business.time,
+                          rating: business.rating,
+                          imageUrl: business.imageUrl,
+                          isOpen: business.isOpen,
+                          availabilityLabel: business.availabilityLabel,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                child: TextField(
-                  controller: _searchCtrl,
-                  onChanged: (value) => setState(() => _query = value),
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar negocio o categoria',
-                    prefixIcon: Icon(
-                      Icons.search_rounded,
-                      color: Color(0xFFF2C21A),
-                    ),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    filled: false,
-                  ),
+              );
+            },
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _navIndex,
+            onTap: (index) {
+              if (index == 0) {
+                setState(() => _navIndex = index);
+                return;
+              }
+
+              if (index == 2) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                );
+                return;
+              }
+
+              if (index == 3) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AccountPage()),
+                );
+                return;
+              }
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Esta seccion estara disponible pronto'),
                 ),
+              );
+            },
+            showUnselectedLabels: true,
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.home_rounded),
+                label: 'Inicio',
               ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Negocios disponibles',
-                      style: textTheme.titleLarge,
-                    ),
-                  ),
-                  Text(
-                    '${filteredBusinesses.length} resultados',
-                    style: textTheme.bodyMedium,
-                  ),
-                ],
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.favorite_rounded),
+                label: 'Favoritos',
               ),
-              const SizedBox(height: 12),
-              if (filteredBusinesses.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(26),
-                    border: Border.all(color: const Color(0x14F2C21A)),
-                  ),
-                  child: const Text(
-                    'No encontramos negocios con esa busqueda.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF666666),
-                    ),
-                  ),
-                ),
-              ...filteredBusinesses.map(
-                (business) => Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: BusinessCard(
-                    businessId: business.id,
-                    name: business.name,
-                    description: business.description,
-                    time: business.time,
-                    rating: business.rating,
-                    imageUrl: business.imageUrl,
-                  ),
-                ),
+              BottomNavigationBarItem(
+                icon: _NotificationNavIcon(count: unreadCount),
+                label: 'Notificaciones',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.person_rounded),
+                label: 'Cuenta',
               ),
             ],
-          );
-        },
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _navIndex,
-        onTap: (index) {
-          if (index == 0) {
-            setState(() => _navIndex = index);
-            return;
-          }
+          ),
+          floatingActionButton: activeOrder == null
+              ? null
+              : ActiveOrderFloatingCard(
+                  order: activeOrder,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OrderReceivedPage(
+                          orderId: activeOrder.orderId,
+                          status: activeOrder.status,
+                          items: activeOrder.items,
+                          subtotal: activeOrder.subtotal,
+                          shipping: activeOrder.shipping,
+                          total: activeOrder.total,
+                          deliveryLabel: activeOrder.deliveryLabel,
+                          recipientName: activeOrder.recipientName,
+                          recipientPhone: activeOrder.recipientPhone,
+                          deliveryAddressText: activeOrder.deliveryAddressText,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+          floatingActionButtonLocation:
+              FloatingActionButtonLocation.centerFloat,
+        );
+      },
+    );
+  }
+}
 
-          if (index == 3) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AccountPage()),
-            );
-            return;
-          }
+class _NotificationNavIcon extends StatelessWidget {
+  final int count;
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Esta seccion estara disponible pronto'),
+  const _NotificationNavIcon({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.notifications_rounded),
+        if (count > 0)
+          Positioned(
+            right: -8,
+            top: -6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE24A2B),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                count > 9 ? '9+' : '$count',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
-          );
-        },
-        showUnselectedLabels: true,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Inicio',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.favorite_rounded),
-            label: 'Favoritos',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications_rounded),
-            label: 'Notificaciones',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_rounded),
-            label: 'Cuenta',
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -280,10 +412,7 @@ class _HeroMetric extends StatelessWidget {
   final String label;
   final String value;
 
-  const _HeroMetric({
-    required this.label,
-    required this.value,
-  });
+  const _HeroMetric({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {

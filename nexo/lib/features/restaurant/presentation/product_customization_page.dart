@@ -76,9 +76,9 @@ class _ProductCustomizationPageState extends State<ProductCustomizationPage> {
   bool _validateRequiredGroups() {
     for (final group in widget.product.optionGroups) {
       final selectedCount = (_selectedByGroup[group.id] ?? <int>{}).length;
-      final minimum = group.isRequired && group.minSelections == 0
-          ? 1
-          : group.minSelections;
+      final minimum = group.isRequired
+          ? (group.minSelections == 0 ? 1 : group.minSelections)
+          : 0;
 
       if (selectedCount < minimum) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -123,9 +123,14 @@ class _ProductCustomizationPageState extends State<ProductCustomizationPage> {
       }
     }
 
-    final sortedOptionIds = selectedOptions.map((option) => option.id).toList()
-      ..sort();
-    final cartKey = '${widget.product.id}:${sortedOptionIds.join('-')}';
+    final groupKeys = _selectedByGroup.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final cartKey = groupKeys.isEmpty
+        ? '${widget.product.id}:base'
+        : '${widget.product.id}:${groupKeys.map((entry) {
+            final optionIds = entry.value.toList()..sort();
+            return '${entry.key}=${optionIds.join(',')}';
+          }).join('|')}';
 
     cartController.addItem(
       businessId: widget.businessId,
@@ -265,10 +270,14 @@ class _ProductCustomizationPageState extends State<ProductCustomizationPage> {
             final selectedIds = _selectedByGroup[group.id] ?? <int>{};
             final selectedCount = selectedIds.length;
             final helper = group.maxSelections == 1
-                ? 'Elige una opcion'
+                ? (group.isRequired ? 'Elige una opcion' : 'Opcional')
                 : group.maxSelections == 0
-                    ? 'Hasta ${group.minSelections == 0 ? 'las que quieras' : 'desde ${group.minSelections} en adelante'}'
-                    : 'Elige hasta ${group.maxSelections} opciones';
+                    ? (group.isRequired
+                        ? 'Elige ${group.minSelections == 0 ? 'al menos una' : 'desde ${group.minSelections} en adelante'}'
+                        : 'Opcional, agrega las que quieras')
+                    : (group.isRequired
+                        ? 'Elige hasta ${group.maxSelections} opciones'
+                        : 'Opcional, hasta ${group.maxSelections} opciones');
 
             return Container(
               margin: const EdgeInsets.only(bottom: 14),
@@ -370,15 +379,15 @@ class _ProductCustomizationPageState extends State<ProductCustomizationPage> {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    option.priceDelta == 0
-                                        ? 'Sin costo extra'
-                                        : '+ \$${option.priceDelta.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      color: Color(0xFF666666),
+                                  if (option.priceDelta > 0) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '+ \$${option.priceDelta.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: Color(0xFF666666),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
                             ),

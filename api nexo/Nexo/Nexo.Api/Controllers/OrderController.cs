@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nexo.Api.Dtos.Orders;
@@ -8,14 +9,18 @@ namespace Nexo.Api.Controllers
 {
     [ApiController]
     [Route("api/orders")]
-    [Authorize]
+    [Authorize(Roles = "Client")]
     public class OrdersController : ControllerBase
     {
         private readonly IOrderService _orderService;
+        private readonly IOrderRealtimeService _realtimeService;
 
-        public OrdersController(IOrderService orderService)
+        public OrdersController(
+            IOrderService orderService,
+            IOrderRealtimeService realtimeService)
         {
             _orderService = orderService;
+            _realtimeService = realtimeService;
         }
 
         [HttpPost]
@@ -61,6 +66,54 @@ namespace Nexo.Api.Controllers
                 cancellationToken);
 
             return order == null ? NotFound("Pedido no encontrado") : Ok(order);
+        }
+
+        [HttpPost("{orderId}/cancel")]
+        public async Task<IActionResult> Cancel(
+            string orderId,
+            [FromBody] CancelOrderRequest request,
+            CancellationToken cancellationToken)
+        {
+            if (request == null)
+                return BadRequest("El motivo de cancelacion es obligatorio.");
+
+            try
+            {
+                var updated = await _orderService.CancelCustomerOrderAsync(
+                    orderId,
+                    GetAuthenticatedUserId()!.Value,
+                    request.Reason,
+                    cancellationToken);
+
+                return updated ? NoContent() : NotFound("Pedido no encontrado");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("stream")]
+        public async Task Stream(CancellationToken cancellationToken)
+        {
+            var userId = GetAuthenticatedUserId();
+            if (!userId.HasValue)
+            {
+                Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+
+            Response.Headers.Append("Cache-Control", "no-cache");
+            Response.Headers.Append("X-Accel-Buffering", "no");
+            Response.ContentType = "text/event-stream";
+
+            await foreach (var message in _realtimeService.SubscribeCustomerAsync(
+                userId.Value,
+                cancellationToken))
+            {
+                await Response.WriteAsync($"data: {message}\n\n", cancellationToken);
+                await Response.Body.FlushAsync(cancellationToken);
+            }
         }
 
         private int? GetAuthenticatedUserId()

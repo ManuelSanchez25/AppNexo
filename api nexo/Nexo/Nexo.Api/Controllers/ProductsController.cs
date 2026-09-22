@@ -23,7 +23,8 @@ namespace Nexo.Api.Controllers
         [HttpGet]
         public IActionResult GetByBusiness(int businessId)
         {
-            var businessExists = _db.Businesses.Any(b => b.Id == businessId);
+            var businessExists = _db.Businesses.Any(
+                b => b.Id == businessId && b.ApprovalStatus == "approved");
             if (!businessExists) return NotFound("No existe el negocio");
 
             var products = _db.Products
@@ -61,6 +62,10 @@ namespace Nexo.Api.Controllers
         [HttpGet("{productId:int}")]
         public IActionResult GetById(int businessId, int productId)
         {
+            var businessExists = _db.Businesses.Any(
+                b => b.Id == businessId && b.ApprovalStatus == "approved");
+            if (!businessExists) return NotFound("No existe el negocio");
+
             var product = _db.Products
                 .Where(p => p.BusinessId == businessId && p.Id == productId)
                 .Include(p => p.OptionGroups.OrderBy(g => g.SortOrder))
@@ -85,7 +90,10 @@ namespace Nexo.Api.Controllers
 
             if (request == null) return BadRequest("Producto vacio");
             if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest("El nombre es obligatorio");
-            if (request.Price <= 0) return BadRequest("El precio debe ser mayor a 0");
+            if (request.Price <= 0 || request.Price > 100000)
+                return BadRequest("El precio debe estar entre 0.01 y 100000");
+            if (request.Name.Trim().Length > 120)
+                return BadRequest("El nombre no puede exceder 120 caracteres");
 
             var normalizedName = request.Name.Trim().ToLower();
             var existsProduct = _db.Products.Any(p =>
@@ -121,7 +129,10 @@ namespace Nexo.Api.Controllers
 
             if (request == null) return BadRequest("Producto vacio");
             if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest("El nombre es obligatorio");
-            if (request.Price <= 0) return BadRequest("El precio debe ser mayor a 0");
+            if (request.Price <= 0 || request.Price > 100000)
+                return BadRequest("El precio debe estar entre 0.01 y 100000");
+            if (request.Name.Trim().Length > 120)
+                return BadRequest("El nombre no puede exceder 120 caracteres");
 
             var product = _db.Products
                 .Include(p => p.OptionGroups)
@@ -195,6 +206,10 @@ namespace Nexo.Api.Controllers
                 return BadRequest("Los limites de seleccion no son validos");
             if (request.MaxSelections > 0 && request.MinSelections > request.MaxSelections)
                 return BadRequest("El minimo no puede ser mayor al maximo");
+            if (!request.IsRequired && request.MinSelections > 0)
+                return BadRequest("Un grupo opcional debe tener minimo 0");
+            if (request.MinSelections > 50 || request.MaxSelections > 50)
+                return BadRequest("Los limites de seleccion no pueden exceder 50");
 
             var group = new ProductOptionGroup
             {
@@ -227,6 +242,10 @@ namespace Nexo.Api.Controllers
                 return BadRequest("Los limites de seleccion no son validos");
             if (request.MaxSelections > 0 && request.MinSelections > request.MaxSelections)
                 return BadRequest("El minimo no puede ser mayor al maximo");
+            if (!request.IsRequired && request.MinSelections > 0)
+                return BadRequest("Un grupo opcional debe tener minimo 0");
+            if (request.MinSelections > 50 || request.MaxSelections > 50)
+                return BadRequest("Los limites de seleccion no pueden exceder 50");
 
             var group = _db.ProductOptionGroups
                 .Include(g => g.Products)
@@ -308,6 +327,8 @@ namespace Nexo.Api.Controllers
             if (product == null) return NotFound("No existe el producto");
             if (request == null || string.IsNullOrWhiteSpace(request.Name))
                 return BadRequest("El nombre de la opcion es obligatorio");
+            if (request.PriceDelta < 0 || request.PriceDelta > 100000)
+                return BadRequest("El precio extra debe estar entre 0 y 100000");
 
             var group = _db.ProductOptionGroups
                 .Include(g => g.Products)
@@ -341,6 +362,8 @@ namespace Nexo.Api.Controllers
             if (product == null) return NotFound("No existe el producto");
             if (request == null || string.IsNullOrWhiteSpace(request.Name))
                 return BadRequest("El nombre de la opcion es obligatorio");
+            if (request.PriceDelta < 0 || request.PriceDelta > 100000)
+                return BadRequest("El precio extra debe estar entre 0 y 100000");
 
             var option = _db.ProductOptions
                 .Include(o => o.ProductOptionGroup)

@@ -4,7 +4,11 @@ namespace Nexo.Api.Dtos.Orders
     {
         public string OrderId { get; set; } = string.Empty;
         public int BusinessId { get; set; }
+        public int? DriverUserId { get; set; }
         public string Status { get; set; } = string.Empty;
+        public string DeliveryPin { get; set; } = string.Empty;
+        public string CancelledBy { get; set; } = string.Empty;
+        public string CancellationReason { get; set; } = string.Empty;
         public decimal Subtotal { get; set; }
         public decimal Shipping { get; set; }
         public decimal Total { get; set; }
@@ -14,6 +18,7 @@ namespace Nexo.Api.Dtos.Orders
         public string RecipientPhone { get; set; } = string.Empty;
         public string DeliveryAddressText { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        public DateTime? DeliveredAt { get; set; }
         public List<CreateOrderItemResponse> Items { get; set; } = new();
     }
 

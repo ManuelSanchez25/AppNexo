@@ -12,10 +12,14 @@ namespace Nexo.Api.Controllers
     public class RestaurantOrdersController : ControllerBase
     {
         private readonly IOrderService _orderService;
+        private readonly IOrderRealtimeService _realtimeService;
 
-        public RestaurantOrdersController(IOrderService orderService)
+        public RestaurantOrdersController(
+            IOrderService orderService,
+            IOrderRealtimeService realtimeService)
         {
             _orderService = orderService;
+            _realtimeService = realtimeService;
         }
 
         [HttpGet]
@@ -64,6 +68,30 @@ namespace Nexo.Api.Controllers
             catch (InvalidOperationException ex)
             {
                 return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("stream")]
+        public async Task Stream(CancellationToken cancellationToken)
+        {
+            var userId = GetAuthenticatedUserId();
+            if (!userId.HasValue)
+            {
+                Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+
+            Response.Headers.Append("Cache-Control", "no-cache");
+            Response.Headers.Append("X-Accel-Buffering", "no");
+            Response.ContentType = "text/event-stream";
+
+            await foreach (var message in _realtimeService.SubscribeRestaurantAsync(
+                userId.Value,
+                IsAdmin(),
+                cancellationToken))
+            {
+                await Response.WriteAsync($"data: {message}\n\n", cancellationToken);
+                await Response.Body.FlushAsync(cancellationToken);
             }
         }
 

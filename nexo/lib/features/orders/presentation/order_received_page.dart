@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nexo/features/auth/application/auth_scope.dart';
 import 'package:nexo/features/auth/presentation/session_home_page.dart';
+import 'package:nexo/features/orders/application/active_order_scope.dart';
 import 'package:nexo/features/orders/data/order_api.dart';
 import 'package:nexo/shared/models/create_order_response.dart';
 
@@ -17,6 +18,7 @@ class OrderReceivedPage extends StatefulWidget {
   final String recipientName;
   final String recipientPhone;
   final String deliveryAddressText;
+  final String deliveryPin;
 
   const OrderReceivedPage({
     super.key,
@@ -30,6 +32,7 @@ class OrderReceivedPage extends StatefulWidget {
     required this.recipientName,
     required this.recipientPhone,
     required this.deliveryAddressText,
+    this.deliveryPin = '',
   });
 
   @override
@@ -47,8 +50,10 @@ class _OrderReceivedPageState extends State<OrderReceivedPage>
   late String _recipientName;
   late String _recipientPhone;
   late String _deliveryAddressText;
+  late String _deliveryPin;
   Timer? _refreshTimer;
   bool _loading = false;
+  bool _cancelling = false;
 
   @override
   void initState() {
@@ -63,15 +68,17 @@ class _OrderReceivedPageState extends State<OrderReceivedPage>
     _recipientName = widget.recipientName;
     _recipientPhone = widget.recipientPhone;
     _deliveryAddressText = widget.deliveryAddressText;
+    _deliveryPin = widget.deliveryPin;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _refreshTimer ??= Timer.periodic(
-      const Duration(seconds: 8),
+      const Duration(seconds: 3),
       (_) => _refreshOrder(),
     );
+    _syncActiveOrder();
     _refreshOrder();
   }
 
@@ -104,12 +111,40 @@ class _OrderReceivedPageState extends State<OrderReceivedPage>
         _recipientName = detail.recipientName;
         _recipientPhone = detail.recipientPhone;
         _deliveryAddressText = detail.deliveryAddressText;
+        _deliveryPin = detail.deliveryPin;
       });
+      await ActiveOrderScope.of(context).trackOrder(detail, token: token);
     } catch (_) {
       // keep current visible data if refresh fails
     } finally {
       _loading = false;
     }
+  }
+
+  Future<void> _syncActiveOrder() async {
+    final token = AuthScope.of(context).token;
+    if (token == null || token.isEmpty) return;
+
+    await ActiveOrderScope.of(context).trackOrder(
+      CreateOrderResponse(
+        orderId: widget.orderId,
+        businessId: 0,
+        driverUserId: null,
+        status: _status,
+        subtotal: _subtotal,
+        shipping: _shipping,
+        total: _total,
+        addressId: 0,
+        deliveryLabel: _deliveryLabel,
+        recipientName: _recipientName,
+        recipientPhone: _recipientPhone,
+        deliveryAddressText: _deliveryAddressText,
+        deliveryPin: _deliveryPin,
+        createdAt: null,
+        items: _items,
+      ),
+      token: token,
+    );
   }
 
   @override
@@ -119,12 +154,76 @@ class _OrderReceivedPageState extends State<OrderReceivedPage>
     super.dispose();
   }
 
+  Future<void> _cancelOrder() async {
+    if (_cancelling || _status != 'received') return;
+
+    const reasons = [
+      'Me equivoqué en el pedido',
+      'La dirección es incorrecta',
+      'Ya no necesito el pedido',
+    ];
+    final reason = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '¿Por qué quieres cancelar?',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 12),
+              ...reasons.map(
+                (item) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(item),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.pop(context, item),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (reason == null || !mounted) return;
+
+    final token = AuthScope.of(context).token;
+    if (token == null || token.isEmpty) return;
+
+    setState(() => _cancelling = true);
+    try {
+      await OrderApi.cancelOrder(
+        token: token,
+        orderId: widget.orderId,
+        reason: reason,
+      );
+      if (!mounted) return;
+      setState(() => _status = 'cancelled');
+      ActiveOrderScope.of(context).clear();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Pedido cancelado')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceAll('Exception:', '').trim()),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pedido recibido'),
-      ),
+      appBar: AppBar(title: const Text('Pedido recibido')),
       body: RefreshIndicator(
         onRefresh: _refreshOrder,
         child: ListView(
@@ -199,10 +298,7 @@ class _OrderReceivedPageState extends State<OrderReceivedPage>
                   const Text(
                     'Esta pantalla se actualiza sola cuando cambia el estado.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                        color: Color(0xFFC9C2B7),
-                    ),
+                    style: TextStyle(fontSize: 12, color: Color(0xFFC9C2B7)),
                   ),
                 ],
               ),
@@ -255,6 +351,38 @@ class _OrderReceivedPageState extends State<OrderReceivedPage>
                         height: 1.4,
                       ),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+            if (_deliveryPin.isNotEmpty &&
+                (_status == 'driver_assigned' || _status == 'on_the_way')) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF4D6),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFFE5C96F)),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'PIN para recibir tu pedido',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _deliveryPin,
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 8,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('Dáselo al repartidor cuando tengas el pedido.'),
                   ],
                 ),
               ),
@@ -318,7 +446,10 @@ class _OrderReceivedPageState extends State<OrderReceivedPage>
                             const SizedBox(height: 6),
                             Text(
                               item.selectedOptions
-                                  .map((option) => '${option.groupName}: ${option.name}')
+                                  .map(
+                                    (option) =>
+                                        '${option.groupName}: ${option.name}',
+                                  )
                                   .join(' · '),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -375,6 +506,16 @@ class _OrderReceivedPageState extends State<OrderReceivedPage>
               },
               child: const Text('Volver al inicio'),
             ),
+            if (_status == 'received') ...[
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: _cancelling ? null : _cancelOrder,
+                child: Text(
+                  _cancelling ? 'Cancelando...' : 'Cancelar pedido',
+                  style: const TextStyle(color: Color(0xFFC5221F)),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -386,6 +527,8 @@ String _statusLabel(String status) {
   return switch (status) {
     'preparing' => 'Preparando',
     'ready' => 'Listo',
+    'driver_assigned' => 'Por recoger',
+    'on_the_way' => 'En camino',
     'delivered' => 'Entregado',
     'cancelled' => 'Cancelado',
     _ => 'Recibido',

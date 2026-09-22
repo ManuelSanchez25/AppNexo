@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:nexo/shared/models/cart_item.dart';
 
 class CartController extends ChangeNotifier {
+  static const int maxQuantityPerItem = 20;
+
   final List<CartItem> _items = [];
   int? _businessId;
 
@@ -18,21 +20,25 @@ class CartController extends ChangeNotifier {
     return _businessId == null || _businessId == businessId;
   }
 
-  bool addItem({
-    required int businessId,
-    required CartItem item,
-  }) {
-    if (!canAddFromBusiness(businessId)) {
+  bool addItem({required int businessId, required CartItem item}) {
+    if (!canAddFromBusiness(businessId) ||
+        item.quantity < 1 ||
+        item.quantity > maxQuantityPerItem) {
       return false;
     }
 
     _businessId ??= businessId;
 
-    final index = _items.indexWhere((cartItem) => cartItem.cartKey == item.cartKey);
+    final index = _items.indexWhere(
+      (cartItem) => cartItem.cartKey == item.cartKey,
+    );
     if (index == -1) {
       _items.add(item);
     } else {
-      _items[index].quantity++;
+      if (_items[index].quantity + item.quantity > maxQuantityPerItem) {
+        return false;
+      }
+      _items[index].quantity += item.quantity;
     }
 
     notifyListeners();
@@ -41,7 +47,9 @@ class CartController extends ChangeNotifier {
 
   void increaseQuantity(String cartKey) {
     final index = _items.indexWhere((item) => item.cartKey == cartKey);
-    if (index == -1) return;
+    if (index == -1 || _items[index].quantity >= maxQuantityPerItem) {
+      return;
+    }
 
     _items[index].quantity++;
     notifyListeners();

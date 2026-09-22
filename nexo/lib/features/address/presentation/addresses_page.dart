@@ -38,7 +38,9 @@ class _AddressesPageState extends State<AddressesPage> {
 
   Future<void> _reload() async {
     final future = _loadAddresses();
-    setState(() => _future = future);
+    setState(() {
+      _future = future;
+    });
     await future;
   }
 
@@ -69,7 +71,10 @@ class _AddressesPageState extends State<AddressesPage> {
   }
 
   Future<void> _setDefault(Address address) async {
-    await AddressApi.setDefaultAddress(token: widget.token, addressId: address.id);
+    await AddressApi.setDefaultAddress(
+      token: widget.token,
+      addressId: address.id,
+    );
     setState(() => _selectedAddressId = address.id);
     await _reload();
   }
@@ -78,7 +83,9 @@ class _AddressesPageState extends State<AddressesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.selectionMode ? 'Selecciona direccion' : 'Mis direcciones'),
+        title: Text(
+          widget.selectionMode ? 'Selecciona direccion' : 'Mis direcciones',
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(),
@@ -90,7 +97,8 @@ class _AddressesPageState extends State<AddressesPage> {
       body: FutureBuilder<List<Address>>(
         future: _future,
         builder: (context, snapshot) {
-          if (_future == null || snapshot.connectionState == ConnectionState.waiting) {
+          if (_future == null ||
+              snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
@@ -123,8 +131,9 @@ class _AddressesPageState extends State<AddressesPage> {
             );
           }
 
-          _selectedAddressId ??=
-              addresses.firstWhere((a) => a.isDefault, orElse: () => addresses.first).id;
+          _selectedAddressId ??= addresses
+              .firstWhere((a) => a.isDefault, orElse: () => addresses.first)
+              .id;
 
           return Column(
             children: [
@@ -142,14 +151,18 @@ class _AddressesPageState extends State<AddressesPage> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
-                              color: selected ? Colors.black : const Color(0xFFE6E1D8),
+                              color: selected
+                                  ? Colors.black
+                                  : const Color(0xFFE6E1D8),
                               width: selected ? 1.4 : 1,
                             ),
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(24),
                             onTap: widget.selectionMode
-                                ? () => setState(() => _selectedAddressId = address.id)
+                                ? () => setState(
+                                    () => _selectedAddressId = address.id,
+                                  )
                                 : null,
                             child: Padding(
                               padding: const EdgeInsets.all(18),
@@ -169,14 +182,22 @@ class _AddressesPageState extends State<AddressesPage> {
                                       ),
                                       if (address.isDefault)
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: const Color(0xFFF4F1EC),
-                                            borderRadius: BorderRadius.circular(999),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
                                           ),
                                           child: const Text(
                                             'Principal',
-                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                            ),
                                           ),
                                         ),
                                     ],
@@ -184,20 +205,32 @@ class _AddressesPageState extends State<AddressesPage> {
                                   const SizedBox(height: 8),
                                   Text(
                                     address.recipientName,
-                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(address.phone, style: const TextStyle(color: Color(0xFF666666))),
+                                  Text(
+                                    address.phone,
+                                    style: const TextStyle(
+                                      color: Color(0xFF666666),
+                                    ),
+                                  ),
                                   const SizedBox(height: 8),
                                   Text(
                                     address.fullAddress,
-                                    style: const TextStyle(color: Color(0xFF666666), height: 1.4),
+                                    style: const TextStyle(
+                                      color: Color(0xFF666666),
+                                      height: 1.4,
+                                    ),
                                   ),
                                   if (address.references.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     Text(
                                       'Referencias: ${address.references}',
-                                      style: const TextStyle(color: Color(0xFF666666)),
+                                      style: const TextStyle(
+                                        color: Color(0xFF666666),
+                                      ),
                                     ),
                                   ],
                                   const SizedBox(height: 12),
@@ -212,7 +245,9 @@ class _AddressesPageState extends State<AddressesPage> {
                                       if (!address.isDefault)
                                         OutlinedButton(
                                           onPressed: () => _setDefault(address),
-                                          child: const Text('Usar como principal'),
+                                          child: const Text(
+                                            'Usar como principal',
+                                          ),
                                         ),
                                       TextButton(
                                         onPressed: () => _delete(address),

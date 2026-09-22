@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nexo/features/auth/application/auth_scope.dart';
+import 'package:nexo/features/restaurant/application/catalog_refresh_controller.dart';
 import 'package:nexo/features/restaurant/data/product_api.dart';
 import 'package:nexo/shared/models/business.dart';
 import 'package:nexo/shared/models/product.dart';
@@ -8,11 +9,7 @@ class ProductFormPage extends StatefulWidget {
   final Business business;
   final Product? product;
 
-  const ProductFormPage({
-    super.key,
-    required this.business,
-    this.product,
-  });
+  const ProductFormPage({super.key, required this.business, this.product});
 
   @override
   State<ProductFormPage> createState() => _ProductFormPageState();
@@ -98,6 +95,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
       }
 
       if (!mounted) return;
+      CatalogRefreshController.instance.catalogChanged();
       Navigator.pop(context, true);
     } catch (error) {
       if (!mounted) return;
@@ -197,9 +195,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
                     controller: _descriptionController,
                     minLines: 3,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Descripcion',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Descripcion'),
                   ),
                   const SizedBox(height: 14),
                   Row(

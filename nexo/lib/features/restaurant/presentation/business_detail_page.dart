@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:nexo/features/cart/application/cart_scope.dart';
+import 'package:nexo/features/restaurant/application/catalog_refresh_controller.dart';
+import 'package:nexo/features/restaurant/data/business_api.dart';
 import 'package:nexo/features/restaurant/data/product_api.dart';
 import 'package:nexo/features/restaurant/presentation/product_customization_page.dart';
 import 'package:nexo/shared/models/cart_item.dart';
@@ -14,6 +16,8 @@ class BusinessDetailPage extends StatefulWidget {
   final String description;
   final String time;
   final double rating;
+  final bool isOpen;
+  final String availabilityLabel;
 
   const BusinessDetailPage({
     super.key,
@@ -22,6 +26,8 @@ class BusinessDetailPage extends StatefulWidget {
     required this.description,
     required this.time,
     required this.rating,
+    required this.isOpen,
+    required this.availabilityLabel,
   });
 
   @override
@@ -33,11 +39,24 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
   Future<List<Product>>? _productsFuture;
   Timer? _refreshTimer;
   bool _observerRegistered = false;
+  late bool _isOpen;
+  late String _availabilityLabel;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOpen = widget.isOpen;
+    _availabilityLabel = widget.availabilityLabel;
+    CatalogRefreshController.instance.addListener(_onCatalogChanged);
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _productsFuture ??= _loadProducts();
+    if (_productsFuture == null) {
+      _productsFuture = _loadProducts();
+      unawaited(_refreshBusinessState());
+    }
     if (!_observerRegistered) {
       WidgetsBinding.instance.addObserver(this);
       _observerRegistered = true;
@@ -57,6 +76,7 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
     setState(() {
       _productsFuture = future;
     });
+    await _refreshBusinessState();
     await future;
   }
 
@@ -65,6 +85,24 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
     setState(() {
       _productsFuture = _loadProducts();
     });
+    unawaited(_refreshBusinessState());
+  }
+
+  void _onCatalogChanged() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reloadSilently());
+  }
+
+  Future<void> _refreshBusinessState() async {
+    try {
+      final business = await BusinessApi.getBusinessById(widget.businessId);
+      if (!mounted) return;
+      setState(() {
+        _isOpen = business.isOpen;
+        _availabilityLabel = business.availabilityLabel;
+      });
+    } catch (_) {
+      // Si falla el refresco silencioso, mantenemos el estado anterior.
+    }
   }
 
   @override
@@ -78,10 +116,24 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    CatalogRefreshController.instance.removeListener(_onCatalogChanged);
     super.dispose();
   }
 
   Future<void> _openProduct(Product product) async {
+    await _refreshBusinessState();
+    if (!mounted) return;
+
+    if (!_isOpen) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Este negocio esta cerrado. $_availabilityLabel'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     try {
       final latestProduct = await ProductApi.getProductDetail(
         businessId: widget.businessId,
@@ -112,7 +164,9 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
       if (!cartController.canAddFromBusiness(widget.businessId)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Tu carrito es de otro negocio. Vacialo para continuar.'),
+            content: Text(
+              'Tu carrito es de otro negocio. Vacialo para continuar.',
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -134,7 +188,9 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            wasExisting ? 'Se actualizo la cantidad' : 'Producto agregado al carrito',
+            wasExisting
+                ? 'Se actualizo la cantidad'
+                : 'Producto agregado al carrito',
           ),
           duration: const Duration(seconds: 1),
           behavior: SnackBarBehavior.floating,
@@ -145,7 +201,9 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No pudimos actualizar este producto. ${error.toString()}'),
+          content: Text(
+            'No pudimos actualizar este producto. ${error.toString()}',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -156,10 +214,7 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.name),
-        actions: const [CartIcon()],
-      ),
+      appBar: AppBar(title: Text(widget.name), actions: const [CartIcon()]),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: ListView(
@@ -205,8 +260,16 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
                     runSpacing: 10,
                     children: [
                       _InfoChip(
-                        icon: Icons.schedule_rounded,
-                        label: widget.time.isEmpty ? 'Tiempo por confirmar' : widget.time,
+                        icon: Icons.timer_rounded,
+                        label: widget.time.isEmpty
+                            ? 'Tiempo por confirmar'
+                            : '${widget.time} min',
+                      ),
+                      _InfoChip(
+                        icon: _isOpen
+                            ? Icons.bolt_rounded
+                            : Icons.pause_circle_rounded,
+                        label: _availabilityLabel,
                       ),
                       _InfoChip(
                         icon: Icons.star_rounded,
@@ -217,6 +280,49 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
                 ],
               ),
             ),
+            if (!_isOpen) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEDE8),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: const Color(0x33E24A2B)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.lock_clock_rounded,
+                      color: Color(0xFFE24A2B),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Negocio cerrado',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFFE24A2B),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Ya no puedes pedir por ahora. $_availabilityLabel',
+                            style: const TextStyle(
+                              color: Color(0xFF6B3428),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             const Text(
               'Productos',
@@ -256,7 +362,7 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
                   children: products.map((product) {
                     return InkWell(
                       borderRadius: BorderRadius.circular(22),
-                      onTap: () => _openProduct(product),
+                      onTap: _isOpen ? () => _openProduct(product) : null,
                       child: Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -290,13 +396,15 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
                                   bottom: 10,
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(999),
-                                    onTap: () => _openProduct(product),
+                                    onTap: _isOpen
+                                        ? () => _openProduct(product)
+                                        : null,
                                     child: Container(
                                       width: 40,
                                       height: 40,
                                       alignment: Alignment.center,
                                       decoration: const BoxDecoration(
-                                        color: const Color(0xFF121212),
+                                        color: Color(0xFF121212),
                                         shape: BoxShape.circle,
                                         boxShadow: [
                                           BoxShadow(
@@ -319,7 +427,12 @@ class _BusinessDetailPageState extends State<BusinessDetailPage>
                               ],
                             ),
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+                              padding: const EdgeInsets.fromLTRB(
+                                12,
+                                12,
+                                12,
+                                14,
+                              ),
                               child: SizedBox(
                                 height: 108,
                                 child: Column(
@@ -387,20 +500,17 @@ class _InfoChip extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _InfoChip({
-    required this.icon,
-    required this.label,
-  });
+  const _InfoChip({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0x22F2C21A),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0x2BF2C21A)),
-        ),
+      decoration: BoxDecoration(
+        color: const Color(0x22F2C21A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0x2BF2C21A)),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

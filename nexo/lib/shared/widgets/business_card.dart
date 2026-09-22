@@ -8,6 +8,8 @@ class BusinessCard extends StatelessWidget {
   final String time;
   final double rating;
   final String imageUrl;
+  final bool isOpen;
+  final String availabilityLabel;
 
   const BusinessCard({
     super.key,
@@ -17,23 +19,15 @@ class BusinessCard extends StatelessWidget {
     required this.time,
     required this.rating,
     required this.imageUrl,
+    required this.isOpen,
+    required this.availabilityLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFEAE5DA)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0E000000),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(28),
       child: InkWell(
         borderRadius: BorderRadius.circular(28),
         onTap: () {
@@ -46,12 +40,25 @@ class BusinessCard extends StatelessWidget {
                 description: description,
                 time: time,
                 rating: rating,
+                isOpen: isOpen,
+                availabilityLabel: availabilityLabel,
               ),
             ),
           );
         },
-        child: Padding(
+        child: Container(
           padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: const Color(0xFFEAE5DA)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0E000000),
+                blurRadius: 18,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -67,17 +74,10 @@ class BusinessCard extends StatelessWidget {
                     ? Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) {
-                          return const Icon(
-                            Icons.storefront_outlined,
-                            color: Color(0xFF6B645A),
-                          );
-                        },
+                        errorBuilder: (_, __, ___) =>
+                            const _BusinessPlaceholder(),
                       )
-                    : const Icon(
-                        Icons.storefront_outlined,
-                        color: Color(0xFF6B645A),
-                      ),
+                    : const _BusinessPlaceholder(),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -112,8 +112,17 @@ class BusinessCard extends StatelessWidget {
                         runSpacing: 8,
                         children: [
                           _MetaPill(
-                            icon: Icons.schedule_rounded,
-                            label: time,
+                            icon: isOpen
+                                ? Icons.bolt_rounded
+                                : Icons.pause_circle_rounded,
+                            label: availabilityLabel,
+                            iconColor: isOpen
+                                ? const Color(0xFF1E8E4D)
+                                : const Color(0xFFE24A2B),
+                          ),
+                          _MetaPill(
+                            icon: Icons.timer_rounded,
+                            label: '$time min',
                           ),
                           _MetaPill(
                             icon: Icons.star_rounded,
@@ -127,23 +136,57 @@ class BusinessCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF171717),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xFFF2C21A),
-                ),
+              Column(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF171717),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Color(0xFFF2C21A),
+                    ),
+                  ),
+                  if (!isOpen) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEDE8),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        'Cerrado',
+                        style: TextStyle(
+                          color: Color(0xFFE24A2B),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+class _BusinessPlaceholder extends StatelessWidget {
+  const _BusinessPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Icon(Icons.storefront_outlined, color: Color(0xFF6B645A));
   }
 }
 
@@ -171,12 +214,16 @@ class _MetaPill extends StatelessWidget {
         children: [
           Icon(icon, size: 15, color: iconColor),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF2D2A26),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF2D2A26),
+              ),
             ),
           ),
         ],

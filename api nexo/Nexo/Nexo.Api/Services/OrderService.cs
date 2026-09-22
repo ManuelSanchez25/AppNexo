@@ -1,6 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Nexo.Api.Data;
+using Nexo.Api.Dtos.Drivers;
 using Nexo.Api.Dtos.Orders;
+using Nexo.Api.Entities;
 using Nexo.Api.Entitites;
 using Nexo.Api.Interfaces;
 
@@ -13,15 +18,19 @@ namespace Nexo.Api.Services
             "received",
             "preparing",
             "ready",
-            "delivered",
+            "on_the_way",
             "cancelled"
         };
 
         private readonly AppDbContext _db;
+        private readonly IOrderRealtimeService _realtimeService;
 
-        public OrderService(AppDbContext db)
+        public OrderService(
+            AppDbContext db,
+            IOrderRealtimeService realtimeService)
         {
             _db = db;
+            _realtimeService = realtimeService;
         }
 
         public async Task<CreateOrderResponse> CreateAsync(
@@ -31,10 +40,12 @@ namespace Nexo.Api.Services
         {
             if (request.Items == null || request.Items.Count == 0)
                 throw new InvalidOperationException("La orden debe tener al menos un producto.");
+            if (request.Items.Count > 50)
+                throw new InvalidOperationException("La orden no puede tener mas de 50 productos diferentes.");
             if (request.AddressId <= 0)
                 throw new InvalidOperationException("Debes seleccionar una direccion de entrega.");
-            if (request.Items.Any(i => i.Quantity <= 0))
-                throw new InvalidOperationException("La cantidad debe ser mayor a 0.");
+            if (request.Items.Any(i => i.Quantity <= 0 || i.Quantity > 20))
+                throw new InvalidOperationException("La cantidad de cada producto debe estar entre 1 y 20.");
             if (!userId.HasValue)
                 throw new InvalidOperationException("No encontramos un usuario autenticado para esta orden.");
 
@@ -81,21 +92,25 @@ namespace Nexo.Api.Services
 
             if (business == null)
                 throw new InvalidOperationException("No encontramos el negocio de este pedido.");
-            var canValidateCoverage =
-                business.Latitude.HasValue &&
-                business.Longitude.HasValue &&
-                address.Latitude.HasValue &&
-                address.Longitude.HasValue &&
-                business.DeliveryRadiusKm >= 0.5 &&
-                business.DeliveryRadiusKm <= 50;
 
-            if (canValidateCoverage)
+            if (business.ApprovalStatus != "approved")
+                throw new InvalidOperationException("Este negocio aun no esta aprobado para recibir pedidos.");
+
+            if (!IsBusinessOpenNow(business))
+                throw new InvalidOperationException("Este negocio esta cerrado por horario. Ya no puedes pedir por ahora.");
+
+            if (business.Latitude is decimal businessLatitude &&
+                business.Longitude is decimal businessLongitude &&
+                address.Latitude is decimal deliveryLatitude &&
+                address.Longitude is decimal deliveryLongitude &&
+                business.DeliveryRadiusKm >= 0.5 &&
+                business.DeliveryRadiusKm <= 50)
             {
                 var distanceKm = CalculateDistanceKm(
-                    (double)business.Latitude.Value,
-                    (double)business.Longitude.Value,
-                    (double)address.Latitude.Value,
-                    (double)address.Longitude.Value);
+                    (double)businessLatitude,
+                    (double)businessLongitude,
+                    (double)deliveryLatitude,
+                    (double)deliveryLongitude);
 
                 if (distanceKm > business.DeliveryRadiusKm)
                 {
@@ -143,6 +158,7 @@ namespace Nexo.Api.Services
                 UserId = userId,
                 AddressId = address.Id,
                 Status = "received",
+                DeliveryPin = RandomNumberGenerator.GetInt32(0, 10000).ToString("D4"),
                 Subtotal = subtotal,
                 Shipping = shipping,
                 Total = total,
@@ -158,6 +174,18 @@ namespace Nexo.Api.Services
 
             _db.Orders.Add(order);
             await _db.SaveChangesAsync(cancellationToken);
+
+            await _realtimeService.PublishCustomerOrderUpdatedAsync(
+                userId.Value,
+                order.PublicId,
+                order.Status);
+            await _realtimeService.PublishRestaurantOrdersUpdatedAsync(
+                business.OwnerUserId,
+                order.PublicId,
+                order.Status);
+            await _realtimeService.PublishDriverOrdersUpdatedAsync(
+                order.PublicId,
+                order.Status);
 
             return await GetOrderResponseByIdAsync(order.Id, cancellationToken)
                 ?? throw new InvalidOperationException("No se pudo cargar la orden creada.");
@@ -200,6 +228,35 @@ namespace Nexo.Api.Services
             return order == null ? null : MapOrder(order);
         }
 
+        public async Task<bool> CancelCustomerOrderAsync(
+            string publicId,
+            int userId,
+            string reason,
+            CancellationToken cancellationToken = default)
+        {
+            var normalizedReason = reason?.Trim() ?? string.Empty;
+            if (normalizedReason.Length < 3 || normalizedReason.Length > 200)
+                throw new InvalidOperationException("Indica un motivo de cancelacion de 3 a 200 caracteres.");
+
+            var order = await _db.Orders
+                .Include(o => o.Business)
+                .FirstOrDefaultAsync(
+                    o => o.PublicId == publicId && o.UserId == userId,
+                    cancellationToken);
+
+            if (order == null) return false;
+            if (order.Status != "received")
+                throw new InvalidOperationException(
+                    "Solo puedes cancelar antes de que el restaurante acepte el pedido.");
+
+            order.Status = "cancelled";
+            order.CancelledBy = "customer";
+            order.CancellationReason = normalizedReason;
+            await _db.SaveChangesAsync(cancellationToken);
+            await PublishOrderChangeAsync(order);
+            return true;
+        }
+
         public async Task<IReadOnlyList<RestaurantOrderSummaryResponse>> GetRestaurantOrdersAsync(
             int restaurantUserId,
             bool isAdmin,
@@ -222,8 +279,15 @@ namespace Nexo.Api.Services
                 {
                     OrderId = o.PublicId,
                     BusinessId = o.BusinessId,
+                    DriverUserId = o.DriverUserId,
                     BusinessName = o.Business.Name,
+                    PickupAddressText = o.Business.AddressText,
+                    PickupLatitude = o.Business.Latitude,
+                    PickupLongitude = o.Business.Longitude,
                     CustomerName = o.User != null ? o.User.Name : "Cliente",
+                    DeliveryAddressText = o.DeliveryAddressText,
+                    DeliveryLatitude = o.DeliveryLatitude,
+                    DeliveryLongitude = o.DeliveryLongitude,
                     Status = o.Status,
                     Total = o.Total,
                     CreatedAt = o.CreatedAt,
@@ -278,9 +342,358 @@ namespace Nexo.Api.Services
             if (order == null)
                 return false;
 
+            if ((order.Status == "delivered" || order.Status == "cancelled") &&
+                normalizedStatus != order.Status)
+                throw new InvalidOperationException("Este pedido ya esta cerrado.");
+
+            if (order.Status == "on_the_way" && normalizedStatus != "on_the_way")
+                throw new InvalidOperationException("El repartidor ya recibio el pedido; el restaurante ya no puede cambiar su estado.");
+
+            if (order.Status == "driver_assigned" &&
+                normalizedStatus != "on_the_way" &&
+                normalizedStatus != "cancelled")
+                throw new InvalidOperationException("El pedido ya tiene repartidor asignado; solo puedes entregarlo al repartidor o cancelarlo.");
+
+            if (normalizedStatus == "delivered")
+                throw new InvalidOperationException("La entrega a domicilio la debe confirmar el repartidor.");
+
+            if (normalizedStatus == "driver_assigned")
+                throw new InvalidOperationException("Ese estado se asigna cuando un repartidor toma el pedido.");
+
+            if (normalizedStatus == "on_the_way" && !order.DriverUserId.HasValue)
+                throw new InvalidOperationException("Primero un repartidor debe tomar el pedido.");
+
+            if (!IsAllowedRestaurantTransition(order.Status, normalizedStatus))
+                throw new InvalidOperationException("Ese cambio de estado no es valido para este pedido.");
+
             order.Status = normalizedStatus;
+            if (normalizedStatus == "cancelled")
+            {
+                order.CancelledBy = isAdmin ? "admin" : "restaurant";
+                order.CancellationReason = "Cancelado por el negocio";
+            }
             await _db.SaveChangesAsync(cancellationToken);
+            if (order.UserId.HasValue)
+            {
+                await _realtimeService.PublishCustomerOrderUpdatedAsync(
+                    order.UserId.Value,
+                    order.PublicId,
+                    order.Status);
+            }
+            await _realtimeService.PublishRestaurantOrdersUpdatedAsync(
+                order.Business.OwnerUserId,
+                order.PublicId,
+                order.Status);
+            await _realtimeService.PublishDriverOrdersUpdatedAsync(
+                order.PublicId,
+                order.Status);
             return true;
+        }
+
+        public async Task<IReadOnlyList<RestaurantOrderSummaryResponse>> GetAvailableDriverOrdersAsync(
+            int driverUserId,
+            CancellationToken cancellationToken = default)
+        {
+            await EnsureApprovedDriverAsync(driverUserId, cancellationToken);
+
+            return await _db.Orders
+                .AsNoTracking()
+                .Include(o => o.Business)
+                .Include(o => o.User)
+                .Where(o => o.Status == "ready" && o.DriverUserId == null)
+                .OrderBy(o => o.CreatedAt)
+                .Select(o => new RestaurantOrderSummaryResponse
+                {
+                    OrderId = o.PublicId,
+                    BusinessId = o.BusinessId,
+                    DriverUserId = o.DriverUserId,
+                    BusinessName = o.Business.Name,
+                    PickupAddressText = o.Business.AddressText,
+                    PickupLatitude = o.Business.Latitude,
+                    PickupLongitude = o.Business.Longitude,
+                    CustomerName = o.User != null ? o.User.Name : "Cliente",
+                    DeliveryAddressText = o.DeliveryAddressText,
+                    DeliveryLatitude = o.DeliveryLatitude,
+                    DeliveryLongitude = o.DeliveryLongitude,
+                    Status = o.Status,
+                    Total = o.Total,
+                    CreatedAt = o.CreatedAt,
+                    ItemsCount = o.Items.Count
+                })
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<RestaurantOrderSummaryResponse>> GetActiveDriverOrdersAsync(
+            int driverUserId,
+            CancellationToken cancellationToken = default)
+        {
+            await EnsureApprovedDriverAsync(driverUserId, cancellationToken);
+
+            return await _db.Orders
+                .AsNoTracking()
+                .Include(o => o.Business)
+                .Include(o => o.User)
+                .Where(o => o.DriverUserId == driverUserId &&
+                    o.Status != "delivered" &&
+                    o.Status != "cancelled")
+                .OrderByDescending(o => o.CreatedAt)
+                .Select(o => new RestaurantOrderSummaryResponse
+                {
+                    OrderId = o.PublicId,
+                    BusinessId = o.BusinessId,
+                    DriverUserId = o.DriverUserId,
+                    BusinessName = o.Business.Name,
+                    PickupAddressText = o.Business.AddressText,
+                    PickupLatitude = o.Business.Latitude,
+                    PickupLongitude = o.Business.Longitude,
+                    CustomerName = o.User != null ? o.User.Name : "Cliente",
+                    DeliveryAddressText = o.DeliveryAddressText,
+                    DeliveryLatitude = o.DeliveryLatitude,
+                    DeliveryLongitude = o.DeliveryLongitude,
+                    Status = o.Status,
+                    Total = o.Total,
+                    CreatedAt = o.CreatedAt,
+                    ItemsCount = o.Items.Count
+                })
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<bool> AcceptDriverOrderAsync(
+            string publicId,
+            int driverUserId,
+            CancellationToken cancellationToken = default)
+        {
+            await EnsureApprovedDriverAsync(driverUserId, cancellationToken);
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+
+            var hasActiveOrder = await _db.Orders.AnyAsync(
+                o => o.DriverUserId == driverUserId &&
+                     o.Status != "delivered" &&
+                     o.Status != "cancelled",
+                cancellationToken);
+            if (hasActiveOrder)
+                throw new InvalidOperationException("Termina tu entrega activa antes de tomar otro pedido.");
+
+            var order = await _db.Orders
+                .Include(o => o.Business)
+                .FirstOrDefaultAsync(
+                    o => o.PublicId == publicId &&
+                         o.Status == "ready" &&
+                         o.DriverUserId == null,
+                    cancellationToken);
+
+            if (order == null) return false;
+
+            order.DriverUserId = driverUserId;
+            order.Status = "driver_assigned";
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            await PublishOrderChangeAsync(order);
+            return true;
+        }
+
+        public async Task<bool> CompleteDriverOrderAsync(
+            string publicId,
+            int driverUserId,
+            string pin,
+            CancellationToken cancellationToken = default)
+        {
+            await EnsureApprovedDriverAsync(driverUserId, cancellationToken);
+
+            var order = await _db.Orders
+                .Include(o => o.Business)
+                .FirstOrDefaultAsync(
+                    o => o.PublicId == publicId &&
+                         o.DriverUserId == driverUserId &&
+                         o.Status == "on_the_way",
+                    cancellationToken);
+
+            if (order == null) return false;
+
+            var normalizedPin = pin?.Trim() ?? string.Empty;
+            if (!string.IsNullOrEmpty(order.DeliveryPin) && normalizedPin != order.DeliveryPin)
+                throw new InvalidOperationException("El PIN de entrega no es correcto.");
+
+            order.Status = "delivered";
+            order.DeliveredAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+            await PublishOrderChangeAsync(order);
+            return true;
+        }
+
+        public async Task<DriverStatsResponse> GetDriverStatsAsync(
+            int driverUserId,
+            CancellationToken cancellationToken = default)
+        {
+            await EnsureApprovedDriverAsync(driverUserId, cancellationToken);
+
+            var today = DateTime.UtcNow.Date;
+            var tomorrow = today.AddDays(1);
+
+            var availableOrders = await _db.Orders.CountAsync(
+                o => o.Status == "ready" && o.DriverUserId == null,
+                cancellationToken);
+            var activeOrders = await _db.Orders.CountAsync(
+                o => o.DriverUserId == driverUserId &&
+                     o.Status != "delivered" &&
+                     o.Status != "cancelled",
+                cancellationToken);
+            var acceptedOrders = await _db.Orders.CountAsync(
+                o => o.DriverUserId == driverUserId,
+                cancellationToken);
+            var deliveredOrders = await _db.Orders.CountAsync(
+                o => o.DriverUserId == driverUserId &&
+                     o.Status == "delivered",
+                cancellationToken);
+            var deliveredToday = await _db.Orders.CountAsync(
+                o => o.DriverUserId == driverUserId &&
+                     o.Status == "delivered" &&
+                     o.DeliveredAt >= today &&
+                     o.DeliveredAt < tomorrow,
+                cancellationToken);
+            var todayEarnings = await _db.Orders
+                .Where(o => o.DriverUserId == driverUserId &&
+                            o.Status == "delivered" &&
+                            o.DeliveredAt >= today &&
+                            o.DeliveredAt < tomorrow)
+                .SumAsync(o => (decimal?)o.Shipping, cancellationToken) ?? 0;
+            var totalEarnings = await _db.Orders
+                .Where(o => o.DriverUserId == driverUserId &&
+                            o.Status == "delivered")
+                .SumAsync(o => (decimal?)o.Shipping, cancellationToken) ?? 0;
+
+            return new DriverStatsResponse
+            {
+                AvailableOrders = availableOrders,
+                ActiveOrders = activeOrders,
+                AcceptedOrders = acceptedOrders,
+                DeliveredOrders = deliveredOrders,
+                DeliveredToday = deliveredToday,
+                TodayEarnings = todayEarnings,
+                TotalEarnings = totalEarnings
+            };
+        }
+
+        private async Task EnsureApprovedDriverAsync(
+            int driverUserId,
+            CancellationToken cancellationToken)
+        {
+            var isApproved = await _db.Users.AnyAsync(
+                u => u.Id == driverUserId &&
+                     u.Role == UserRole.Driver &&
+                     u.DriverApprovalStatus == "approved",
+                cancellationToken);
+
+            if (!isApproved)
+                throw new InvalidOperationException("Tu cuenta de repartidor aun no esta aprobada.");
+        }
+
+        private static bool IsAllowedRestaurantTransition(
+            string currentStatus,
+            string nextStatus)
+        {
+            if (currentStatus == nextStatus)
+                return true;
+
+            return currentStatus switch
+            {
+                "received" => nextStatus is "preparing" or "cancelled",
+                "preparing" => nextStatus is "ready" or "cancelled",
+                "ready" => nextStatus is "cancelled",
+                "driver_assigned" => nextStatus is "on_the_way" or "cancelled",
+                "on_the_way" => false,
+                "delivered" => false,
+                "cancelled" => false,
+                _ => false
+            };
+        }
+
+        private async Task PublishOrderChangeAsync(Order order)
+        {
+            if (order.UserId.HasValue)
+            {
+                await _realtimeService.PublishCustomerOrderUpdatedAsync(
+                    order.UserId.Value,
+                    order.PublicId,
+                    order.Status);
+            }
+
+            await _realtimeService.PublishRestaurantOrdersUpdatedAsync(
+                order.Business.OwnerUserId,
+                order.PublicId,
+                order.Status);
+            await _realtimeService.PublishDriverOrdersUpdatedAsync(
+                order.PublicId,
+                order.Status);
+        }
+
+        private static bool IsBusinessOpenNow(Business business)
+        {
+            var todaySchedule = GetSchedule(business)
+                .FirstOrDefault(item => item.Day == TodayNumber());
+            if (todaySchedule == null || !todaySchedule.IsOpen)
+                return false;
+
+            if (!TimeOnly.TryParseExact(todaySchedule.OpenTime, "HH:mm", out var open) ||
+                !TimeOnly.TryParseExact(todaySchedule.CloseTime, "HH:mm", out var close))
+                return false;
+
+            if (close <= open)
+                return false;
+
+            var now = TimeOnly.FromDateTime(DateTime.Now);
+            return now >= open && now < close;
+        }
+
+        private static List<BusinessOperatingHour> GetSchedule(Business business)
+        {
+            if (!string.IsNullOrWhiteSpace(business.OperatingHoursJson))
+            {
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<List<BusinessOperatingHour>>(
+                        business.OperatingHoursJson);
+                    if (parsed != null && parsed.Count > 0)
+                        return parsed;
+                }
+                catch (JsonException)
+                {
+                    // Fall back to legacy columns below.
+                }
+            }
+
+            var days = (business.OpenDays ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(day => int.TryParse(day, out var parsed) ? parsed : 0)
+                .Where(day => day >= 1 && day <= 7)
+                .ToHashSet();
+
+            return Enumerable.Range(1, 7)
+                .Select(day => new BusinessOperatingHour
+                {
+                    Day = day,
+                    IsOpen = days.Contains(day),
+                    OpenTime = business.OpenTime,
+                    CloseTime = business.CloseTime
+                })
+                .ToList();
+        }
+
+        private static int TodayNumber()
+        {
+            var day = (int)DateTime.Now.DayOfWeek;
+            return day == 0 ? 7 : day;
+        }
+
+        private class BusinessOperatingHour
+        {
+            public int Day { get; set; }
+            public bool IsOpen { get; set; }
+            public string OpenTime { get; set; } = "09:00";
+            public string CloseTime { get; set; } = "22:00";
         }
 
         private List<OrderItemOptionSelection> BuildSelectedOptions(Product product, List<int>? selectedOptionIds)
@@ -308,11 +721,12 @@ namespace Nexo.Api.Services
                     ? selections.Count
                     : 0;
 
-                if (group.IsRequired && selectedCount < Math.Max(group.MinSelections, 1))
-                    throw new InvalidOperationException($"Debes seleccionar opciones en {group.Name}.");
+                var minimumSelections = group.IsRequired
+                    ? Math.Max(group.MinSelections, 1)
+                    : 0;
 
-                if (selectedCount < group.MinSelections)
-                    throw new InvalidOperationException($"Selecciona al menos {group.MinSelections} opciones en {group.Name}.");
+                if (selectedCount < minimumSelections)
+                    throw new InvalidOperationException($"Debes seleccionar opciones en {group.Name}.");
 
                 if (group.MaxSelections > 0 && selectedCount > group.MaxSelections)
                     throw new InvalidOperationException($"Solo puedes seleccionar hasta {group.MaxSelections} opciones en {group.Name}.");
@@ -358,7 +772,11 @@ namespace Nexo.Api.Services
             {
                 OrderId = order.PublicId,
                 BusinessId = order.BusinessId,
+                DriverUserId = order.DriverUserId,
                 Status = order.Status,
+                DeliveryPin = order.DeliveryPin,
+                CancelledBy = order.CancelledBy,
+                CancellationReason = order.CancellationReason,
                 Subtotal = order.Subtotal,
                 Shipping = order.Shipping,
                 Total = order.Total,
@@ -368,6 +786,7 @@ namespace Nexo.Api.Services
                 RecipientPhone = order.RecipientPhone,
                 DeliveryAddressText = order.DeliveryAddressText,
                 CreatedAt = order.CreatedAt,
+                DeliveredAt = order.DeliveredAt,
                 Items = order.Items
                     .Select(item => new CreateOrderItemResponse
                     {

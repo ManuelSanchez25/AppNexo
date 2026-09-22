@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nexo/features/auth/application/auth_scope.dart';
+import 'package:nexo/features/restaurant/application/catalog_refresh_controller.dart';
 import 'package:nexo/features/restaurant/data/product_api.dart';
 import 'package:nexo/features/restaurant/presentation/product_form_page.dart';
 import 'package:nexo/features/restaurant/presentation/product_options_page.dart';
@@ -9,10 +12,7 @@ import 'package:nexo/shared/models/product.dart';
 class BusinessProductsPage extends StatefulWidget {
   final Business business;
 
-  const BusinessProductsPage({
-    super.key,
-    required this.business,
-  });
+  const BusinessProductsPage({super.key, required this.business});
 
   @override
   State<BusinessProductsPage> createState() => _BusinessProductsPageState();
@@ -20,11 +20,34 @@ class BusinessProductsPage extends StatefulWidget {
 
 class _BusinessProductsPageState extends State<BusinessProductsPage> {
   Future<List<Product>>? _productsFuture;
+  Timer? _refreshTimer;
+  bool _reloadInProgress = false;
+
+  @override
+  void initState() {
+    super.initState();
+    CatalogRefreshController.instance.addListener(_onCatalogChanged);
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _productsFuture ??= _loadProducts();
+    _refreshTimer ??= Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _reloadSilently(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    CatalogRefreshController.instance.removeListener(_onCatalogChanged);
+    super.dispose();
+  }
+
+  void _onCatalogChanged() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reloadSilently());
   }
 
   Future<List<Product>> _loadProducts() {
@@ -36,19 +59,32 @@ class _BusinessProductsPageState extends State<BusinessProductsPage> {
   }
 
   Future<void> _reload() async {
+    if (_reloadInProgress) return;
+    _reloadInProgress = true;
     final future = _loadProducts();
-    setState(() => _productsFuture = future);
-    await future;
+    if (mounted) {
+      setState(() {
+        _productsFuture = future;
+      });
+    }
+    try {
+      await future;
+    } finally {
+      _reloadInProgress = false;
+    }
+  }
+
+  void _reloadSilently() {
+    if (!mounted || _reloadInProgress) return;
+    unawaited(_reload());
   }
 
   Future<void> _openProductForm([Product? product]) async {
     final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => ProductFormPage(
-          business: widget.business,
-          product: product,
-        ),
+        builder: (_) =>
+            ProductFormPage(business: widget.business, product: product),
       ),
     );
 
@@ -61,13 +97,11 @@ class _BusinessProductsPageState extends State<BusinessProductsPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ProductOptionsPage(
-          business: widget.business,
-          product: product,
-        ),
+        builder: (_) =>
+            ProductOptionsPage(business: widget.business, product: product),
       ),
     );
-    await _reload();
+    if (mounted) await _reload();
   }
 
   @override
@@ -101,9 +135,12 @@ class _BusinessProductsPageState extends State<BusinessProductsPage> {
           }
 
           final products = snapshot.data ?? [];
-          final visibleCount = products.where((item) => item.isAvailable).length;
-          final customizableCount =
-              products.where((item) => item.optionGroups.isNotEmpty).length;
+          final visibleCount = products
+              .where((item) => item.isAvailable)
+              .length;
+          final customizableCount = products
+              .where((item) => item.optionGroups.isNotEmpty)
+              .length;
 
           return RefreshIndicator(
             onRefresh: _reload,
@@ -329,10 +366,7 @@ class _DashboardMetric extends StatelessWidget {
   final String label;
   final String value;
 
-  const _DashboardMetric({
-    required this.label,
-    required this.value,
-  });
+  const _DashboardMetric({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -422,19 +456,13 @@ class _EmptyProductsState extends StatelessWidget {
           SizedBox(height: 14),
           Text(
             'Todavia no hay productos',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           SizedBox(height: 8),
           Text(
             'Agrega el primer producto para empezar a mostrar el menu al cliente.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF666666),
-              height: 1.45,
-            ),
+            style: TextStyle(color: Color(0xFF666666), height: 1.45),
           ),
         ],
       ),

@@ -104,11 +104,24 @@ class _CartPageState extends State<CartPage> {
                       const SizedBox(height: 18),
                       GestureDetector(
                         onTap: () async {
+                          final token = authController.token;
+                          if (token == null || token.isEmpty) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Tu sesion ya no es valida. Vuelve a iniciar sesion.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
                           final selected = await Navigator.push<Address>(
                             context,
                             MaterialPageRoute(
                               builder: (_) => AddressesPage(
-                                token: authController.token!,
+                                token: token,
                                 suggestedRecipientName: authController.userName,
                                 selectionMode: true,
                                 initiallySelectedAddressId: _selectedAddress?.id,
@@ -486,7 +499,7 @@ class _CartPageState extends State<CartPage> {
                       Row(
                         children: [
                           _HeroMetric(
-                            label: 'Items',
+                            label: 'Productos',
                             value: cartController.items.length.toString(),
                           ),
                           const SizedBox(width: 10),
