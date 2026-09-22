@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyB81YcxXN_FgAsetijYCjNFF8a-2v8Eg_Q</string>
+	<key>GCM_SENDER_ID</key>
+	<string>735774461117</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.reyval.nexo</string>
+	<key>PROJECT_ID</key>
+	<string>nexo-8935f</string>
+	<key>STORAGE_BUCKET</key>
+	<string>nexo-8935f.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:735774461117:ios:60c5542eabe03ed1a7bbd4</string>
+</dict>
+</plist>
