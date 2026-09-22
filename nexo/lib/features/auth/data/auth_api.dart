@@ -73,7 +73,15 @@ class AuthApi {
     );
 
     if (response.statusCode != 200) {
-      throw Exception(response.body.replaceAll('"', ''));
+      final serverMessage = response.body.replaceAll('"', '').trim();
+      final fallbackMessage = switch (response.statusCode) {
+        401 => 'El correo, teléfono, usuario o contraseña no son correctos.',
+        403 => 'Debes verificar tu correo antes de entrar.',
+        >= 500 =>
+          'No pudimos iniciar sesión. Inténtalo nuevamente en un momento.',
+        _ => 'No pudimos iniciar sesión.',
+      };
+      throw Exception(serverMessage.isEmpty ? fallbackMessage : serverMessage);
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
