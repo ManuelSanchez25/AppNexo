@@ -7,6 +7,7 @@ import 'package:nexo/features/cart/application/cart_scope.dart';
 import 'package:nexo/features/orders/data/order_api.dart';
 import 'package:nexo/features/orders/presentation/order_received_page.dart';
 import 'package:nexo/shared/models/address.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
@@ -404,6 +405,17 @@ class _CartPageState extends State<CartPage> {
                                       idempotencyKey: _pendingOrderRequestId ??=
                                           _createOrderRequestId(),
                                     );
+                                    final checkoutUrl = await OrderApi.createMercadoPagoCheckout(
+                                      token: token,
+                                      orderId: response.orderId,
+                                    );
+                                    final launched = await launchUrl(
+                                      Uri.parse(checkoutUrl),
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                    if (!launched) {
+                                      throw Exception('No se pudo abrir Mercado Pago. Intenta nuevamente.');
+                                    }
                                     if (!pageContext.mounted) return;
                                     cartController.clear();
                                     _pendingOrderRequestId = null;

@@ -8,6 +8,26 @@ import 'package:nexo/shared/models/order_history_item.dart';
 import 'package:nexo/shared/models/restaurant_order_summary.dart';
 
 class OrderApi {
+  static Future<String> createMercadoPagoCheckout({
+    required String token,
+    required String orderId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/payments/mercadopago/orders/$orderId/checkout'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (response.statusCode != 200) {
+      throw Exception(response.body.replaceAll('"', ''));
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final checkoutUrl = (json['checkoutUrl'] ?? '').toString();
+    if (checkoutUrl.isEmpty) throw Exception('Mercado Pago no devolvió un enlace de pago.');
+    return checkoutUrl;
+  }
+
   static Future<CreateOrderResponse> createOrder({
     required List<CartItem> items,
     required String token,

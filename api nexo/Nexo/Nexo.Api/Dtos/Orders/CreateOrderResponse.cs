@@ -6,6 +6,7 @@ namespace Nexo.Api.Dtos.Orders
         public int BusinessId { get; set; }
         public int? DriverUserId { get; set; }
         public string Status { get; set; } = string.Empty;
+        public string PaymentStatus { get; set; } = string.Empty;
         public string DeliveryPin { get; set; } = string.Empty;
         public string CancelledBy { get; set; } = string.Empty;
         public string CancellationReason { get; set; } = string.Empty;

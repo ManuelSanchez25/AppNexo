@@ -160,6 +160,12 @@ namespace Nexo.Api.Data
                 .Property(o => o.ClientRequestId)
                 .HasMaxLength(64);
 
+            modelBuilder.Entity<Order>().Property(o => o.PaymentProvider).HasMaxLength(30);
+            modelBuilder.Entity<Order>().Property(o => o.PaymentStatus).HasMaxLength(30);
+            modelBuilder.Entity<Order>().Property(o => o.MercadoPagoPreferenceId).HasMaxLength(100);
+            modelBuilder.Entity<Order>().Property(o => o.MercadoPagoPaymentId).HasMaxLength(100);
+            modelBuilder.Entity<Order>().Property(o => o.MercadoPagoCheckoutUrl).HasMaxLength(2000);
+
             modelBuilder.Entity<Order>()
                 .HasIndex(o => new { o.UserId, o.ClientRequestId })
                 .IsUnique()

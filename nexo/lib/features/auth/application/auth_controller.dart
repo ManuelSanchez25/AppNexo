@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:nexo/features/auth/data/auth_api.dart';
-import 'package:nexo/features/notifications/data/push_notification_service.dart';
 import 'package:nexo/shared/models/login_response.dart';
 
 class AuthController extends ChangeNotifier {
@@ -23,7 +21,6 @@ class AuthController extends ChangeNotifier {
 
   void setSession(LoginResponse response) {
     _session = response;
-    unawaited(PushNotificationService.syncForSession(response.token));
     notifyListeners();
   }
 
@@ -37,7 +34,6 @@ class AuthController extends ChangeNotifier {
 
   void logout() {
     _session = null;
-    PushNotificationService.clearSession();
     notifyListeners();
   }
 }

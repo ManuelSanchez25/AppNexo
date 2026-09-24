@@ -174,7 +174,9 @@ namespace Nexo.Api.Services
                 UserId = userId,
                 ClientRequestId = clientRequestId,
                 AddressId = address.Id,
-                Status = "received",
+                Status = "pending_payment",
+                PaymentProvider = "mercado_pago",
+                PaymentStatus = "pending",
                 DeliveryPin = RandomNumberGenerator.GetInt32(0, 10000).ToString("D4"),
                 Subtotal = subtotal,
                 Shipping = shipping,
@@ -191,18 +193,6 @@ namespace Nexo.Api.Services
 
             _db.Orders.Add(order);
             await _db.SaveChangesAsync(cancellationToken);
-
-            await _realtimeService.PublishCustomerOrderUpdatedAsync(
-                userId.Value,
-                order.PublicId,
-                order.Status);
-            await _realtimeService.PublishRestaurantOrdersUpdatedAsync(
-                business.OwnerUserId,
-                order.PublicId,
-                order.Status);
-            await _realtimeService.PublishDriverOrdersUpdatedAsync(
-                order.PublicId,
-                order.Status);
 
             return await GetOrderResponseByIdAsync(order.Id, cancellationToken)
                 ?? throw new InvalidOperationException("No se pudo cargar la orden creada.");
@@ -262,7 +252,7 @@ namespace Nexo.Api.Services
                     cancellationToken);
 
             if (order == null) return false;
-            if (order.Status != "received")
+            if (order.Status is not ("pending_payment" or "received"))
                 throw new InvalidOperationException(
                     "Solo puedes cancelar antes de que el restaurante acepte el pedido.");
 
@@ -283,6 +273,7 @@ namespace Nexo.Api.Services
                 .AsNoTracking()
                 .Include(o => o.Business)
                 .Include(o => o.User)
+                .Where(o => o.PaymentStatus == "approved")
                 .OrderByDescending(o => o.CreatedAt)
                 .AsQueryable();
 
@@ -331,6 +322,8 @@ namespace Nexo.Api.Services
                 query = query.Where(o => o.Business.OwnerUserId == restaurantUserId);
             }
 
+            query = query.Where(o => o.PaymentStatus == "approved");
+
             var order = await query.FirstOrDefaultAsync(o => o.PublicId == publicId, cancellationToken);
             return order == null ? null : MapOrder(order);
         }
@@ -354,6 +347,8 @@ namespace Nexo.Api.Services
             {
                 query = query.Where(o => o.Business.OwnerUserId == restaurantUserId);
             }
+
+            query = query.Where(o => o.PaymentStatus == "approved");
 
             var order = await query.FirstOrDefaultAsync(o => o.PublicId == publicId, cancellationToken);
             if (order == null)
@@ -791,6 +786,7 @@ namespace Nexo.Api.Services
                 BusinessId = order.BusinessId,
                 DriverUserId = order.DriverUserId,
                 Status = order.Status,
+                PaymentStatus = order.PaymentStatus,
                 DeliveryPin = order.DeliveryPin,
                 CancelledBy = order.CancelledBy,
                 CancellationReason = order.CancellationReason,

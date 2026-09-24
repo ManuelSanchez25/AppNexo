@@ -3,6 +3,7 @@ class CreateOrderResponse {
   final int businessId;
   final int? driverUserId;
   final String status;
+  final String paymentStatus;
   final String deliveryPin;
   final String cancelledBy;
   final String cancellationReason;
@@ -23,6 +24,7 @@ class CreateOrderResponse {
     required this.businessId,
     required this.driverUserId,
     required this.status,
+    this.paymentStatus = '',
     this.deliveryPin = '',
     this.cancelledBy = '',
     this.cancellationReason = '',
@@ -45,6 +47,7 @@ class CreateOrderResponse {
       businessId: (json['businessId'] ?? 0) as int,
       driverUserId: json['driverUserId'] as int?,
       status: (json['status'] ?? '') as String,
+      paymentStatus: (json['paymentStatus'] ?? '') as String,
       deliveryPin: (json['deliveryPin'] ?? '') as String,
       cancelledBy: (json['cancelledBy'] ?? '') as String,
       cancellationReason: (json['cancellationReason'] ?? '') as String,
