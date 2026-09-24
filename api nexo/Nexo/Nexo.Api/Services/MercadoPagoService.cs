@@ -72,7 +72,6 @@ namespace Nexo.Api.Services
                     currency_id = "MXN"
                 }),
                 external_reference = order.PublicId,
-                payer = new { email = order.User?.Email ?? string.Empty },
                 notification_url = $"{publicBaseUrl}/api/payments/mercadopago/webhook",
                 back_urls = new
                 {
