@@ -107,23 +107,28 @@ class _AddressFormPageState extends State<AddressFormPage> {
   }
 
   String? _validateBeforeSave() {
-    if (_labelController.text.trim().isEmpty)
+    if (_labelController.text.trim().isEmpty) {
       return 'Escribe una etiqueta para la direccion';
-    if (_recipientController.text.trim().isEmpty)
+    }
+    if (_recipientController.text.trim().isEmpty) {
       return 'Escribe quien recibe el pedido';
-    if (_phoneController.text.trim().isEmpty)
+    }
+    if (_phoneController.text.trim().isEmpty) {
       return 'Escribe un telefono de contacto';
+    }
     if (_streetController.text.trim().isEmpty) return 'Escribe la calle';
     if (_exteriorController.text.trim().isEmpty &&
         _interiorController.text.trim().isEmpty) {
       return 'Escribe al menos numero exterior o interior';
     }
-    if (_neighborhoodController.text.trim().isEmpty)
+    if (_neighborhoodController.text.trim().isEmpty) {
       return 'Escribe la colonia';
+    }
     if (_cityController.text.trim().isEmpty) return 'Escribe la ciudad';
     if (_stateController.text.trim().isEmpty) return 'Escribe el estado';
-    if (_postalCodeController.text.trim().isEmpty)
+    if (_postalCodeController.text.trim().isEmpty) {
       return 'Escribe el codigo postal';
+    }
     if (_latitude == null || _longitude == null) {
       return 'Selecciona el punto de entrega en el mapa';
     }

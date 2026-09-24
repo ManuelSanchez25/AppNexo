@@ -63,11 +63,46 @@ class _AddressesPageState extends State<AddressesPage> {
   }
 
   Future<void> _delete(Address address) async {
-    await AddressApi.deleteAddress(token: widget.token, addressId: address.id);
-    if (_selectedAddressId == address.id) {
-      _selectedAddressId = null;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar direccion'),
+        content: Text(
+          '¿Quieres eliminar "${address.label}"? Esta accion no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB3261E),
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await AddressApi.deleteAddress(
+        token: widget.token,
+        addressId: address.id,
+      );
+      if (!mounted) return;
+      if (_selectedAddressId == address.id) {
+        _selectedAddressId = null;
+      }
+      await _reload();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No pudimos eliminar la direccion: $error')),
+      );
     }
-    await _reload();
   }
 
   Future<void> _setDefault(Address address) async {
@@ -249,9 +284,15 @@ class _AddressesPageState extends State<AddressesPage> {
                                             'Usar como principal',
                                           ),
                                         ),
-                                      TextButton(
+                                      TextButton.icon(
                                         onPressed: () => _delete(address),
-                                        child: const Text('Eliminar'),
+                                        icon: const Icon(Icons.delete_outline),
+                                        label: const Text('Eliminar'),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: const Color(
+                                            0xFFB3261E,
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   ),
