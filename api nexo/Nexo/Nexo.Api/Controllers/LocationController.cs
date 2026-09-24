@@ -121,6 +121,7 @@ namespace Nexo.Api.Controllers
                     ? displayName.GetString() ?? string.Empty
                     : string.Empty,
                 Street = FirstNonEmpty(ReadAddress("road"), ReadAddress("pedestrian")),
+                ExteriorNumber = ReadAddress("house_number"),
                 Neighborhood = neighborhood,
                 City = city,
                 State = ReadAddress("state"),

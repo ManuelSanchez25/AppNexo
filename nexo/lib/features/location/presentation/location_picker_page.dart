@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:nexo/features/location/data/location_api.dart';
 import 'package:nexo/shared/models/location_search_result.dart';
 
@@ -26,6 +28,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   late final TextEditingController _searchController;
   List<LocationSearchResult> _results = const [];
   bool _searching = false;
+  bool _resolvingPoint = false;
   LocationSearchResult? _selectedResult;
 
   @override
@@ -44,7 +47,9 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     final query = _searchController.text.trim();
     if (query.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Escribe al menos 4 caracteres para buscar.')),
+        const SnackBar(
+          content: Text('Escribe al menos 4 caracteres para buscar.'),
+        ),
       );
       return;
     }
@@ -56,9 +61,9 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       setState(() => _results = results);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$error')));
     } finally {
       if (mounted) {
         setState(() => _searching = false);
@@ -73,14 +78,40 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     });
   }
 
+  Future<void> _selectMapPoint(LatLng point) async {
+    setState(() => _resolvingPoint = true);
+    try {
+      final result = await LocationApi.reverse(
+        latitude: point.latitude,
+        longitude: point.longitude,
+      );
+      if (!mounted) return;
+      _selectResult(result);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _resolvingPoint = false);
+    }
+  }
+
+  LatLng get _mapCenter {
+    final selected = _selectedResult;
+    if (selected != null) return LatLng(selected.latitude, selected.longitude);
+    if (widget.initialLatitude != null && widget.initialLongitude != null) {
+      return LatLng(widget.initialLatitude!, widget.initialLongitude!);
+    }
+    return const LatLng(21.0375, -104.3715);
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedResult = _selectedResult;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
+      appBar: AppBar(title: Text(widget.title)),
       body: Column(
         children: [
           Padding(
@@ -106,37 +137,62 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: SizedBox(
+                height: 290,
+                child: FlutterMap(
+                  options: MapOptions(
+                    initialCenter: _mapCenter,
+                    initialZoom: selectedResult == null ? 13 : 17,
+                    onTap: (_, point) => _selectMapPoint(point),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      subdomains: const ['a', 'b', 'c'],
+                      userAgentPackageName: 'com.reyval.nexo',
+                    ),
+                    if (selectedResult != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: LatLng(
+                              selectedResult.latitude,
+                              selectedResult.longitude,
+                            ),
+                            width: 48,
+                            height: 48,
+                            child: const Icon(
+                              Icons.location_pin,
+                              color: Color(0xFFD94B3D),
+                              size: 48,
+                            ),
+                          ),
+                        ],
+                      ),
+                    const SimpleAttributionWidget(
+                      source: Text('OpenStreetMap contributors'),
+                    ),
+                    if (_resolvingPoint)
+                      const Center(child: CircularProgressIndicator()),
+                  ],
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
-                Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFFCF7),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFFE6E1D8)),
-                  ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Seleccion por resultados',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Por ahora dejamos el flujo sin mapa visual para que puedas seguir probando en web sin depender de tiles externos. Busca la direccion y elige el resultado correcto.',
-                        style: TextStyle(
-                          color: Color(0xFF666666),
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    'Busca la calle y elige el resultado, o toca el punto exacto en el mapa. Al seleccionarlo se guardan sus coordenadas.',
+                    style: TextStyle(color: Color(0xFF666666), height: 1.45),
                   ),
                 ),
                 if (selectedResult != null)
@@ -181,7 +237,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(22),
                       border: Border.all(
-                        color: _selectedResult?.displayName == result.displayName
+                        color:
+                            _selectedResult?.displayName == result.displayName
                             ? Colors.black
                             : const Color(0xFFE6E1D8),
                       ),
@@ -195,9 +252,11 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       subtitle: Text(
-                        [result.neighborhood, result.city, result.state]
-                            .where((part) => part.isNotEmpty)
-                            .join(', '),
+                        [
+                          result.neighborhood,
+                          result.city,
+                          result.state,
+                        ].where((part) => part.isNotEmpty).join(', '),
                       ),
                       trailing: const Icon(Icons.north_west_rounded),
                     ),

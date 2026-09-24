@@ -1,6 +1,7 @@
 class LocationSearchResult {
   final String displayName;
   final String street;
+  final String exteriorNumber;
   final String neighborhood;
   final String city;
   final String state;
@@ -11,6 +12,7 @@ class LocationSearchResult {
   const LocationSearchResult({
     required this.displayName,
     required this.street,
+    required this.exteriorNumber,
     required this.neighborhood,
     required this.city,
     required this.state,
@@ -23,6 +25,7 @@ class LocationSearchResult {
     return LocationSearchResult(
       displayName: (json['displayName'] ?? '') as String,
       street: (json['street'] ?? '') as String,
+      exteriorNumber: (json['exteriorNumber'] ?? '') as String,
       neighborhood: (json['neighborhood'] ?? '') as String,
       city: (json['city'] ?? '') as String,
       state: (json['state'] ?? '') as String,

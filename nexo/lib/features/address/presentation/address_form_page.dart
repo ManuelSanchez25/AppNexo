@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:nexo/features/address/data/address_api.dart';
+import 'package:nexo/features/location/presentation/location_picker_page.dart';
 import 'package:nexo/shared/models/address.dart';
+import 'package:nexo/shared/models/location_search_result.dart';
 
 class AddressFormPage extends StatefulWidget {
   final String token;
@@ -46,13 +48,23 @@ class _AddressFormPageState extends State<AddressFormPage> {
     );
     _phoneController = TextEditingController(text: address?.phone ?? '');
     _streetController = TextEditingController(text: address?.street ?? '');
-    _exteriorController = TextEditingController(text: address?.exteriorNumber ?? '');
-    _interiorController = TextEditingController(text: address?.interiorNumber ?? '');
-    _neighborhoodController = TextEditingController(text: address?.neighborhood ?? '');
+    _exteriorController = TextEditingController(
+      text: address?.exteriorNumber ?? '',
+    );
+    _interiorController = TextEditingController(
+      text: address?.interiorNumber ?? '',
+    );
+    _neighborhoodController = TextEditingController(
+      text: address?.neighborhood ?? '',
+    );
     _cityController = TextEditingController(text: address?.city ?? '');
     _stateController = TextEditingController(text: address?.state ?? '');
-    _postalCodeController = TextEditingController(text: address?.postalCode ?? '');
-    _referencesController = TextEditingController(text: address?.references ?? '');
+    _postalCodeController = TextEditingController(
+      text: address?.postalCode ?? '',
+    );
+    _referencesController = TextEditingController(
+      text: address?.references ?? '',
+    );
     _latitude = address?.latitude;
     _longitude = address?.longitude;
     _selectedLocationLabel = address?.fullAddress ?? '';
@@ -95,27 +107,116 @@ class _AddressFormPageState extends State<AddressFormPage> {
   }
 
   String? _validateBeforeSave() {
-    if (_labelController.text.trim().isEmpty) return 'Escribe una etiqueta para la direccion';
-    if (_recipientController.text.trim().isEmpty) return 'Escribe quien recibe el pedido';
-    if (_phoneController.text.trim().isEmpty) return 'Escribe un telefono de contacto';
+    if (_labelController.text.trim().isEmpty)
+      return 'Escribe una etiqueta para la direccion';
+    if (_recipientController.text.trim().isEmpty)
+      return 'Escribe quien recibe el pedido';
+    if (_phoneController.text.trim().isEmpty)
+      return 'Escribe un telefono de contacto';
     if (_streetController.text.trim().isEmpty) return 'Escribe la calle';
     if (_exteriorController.text.trim().isEmpty &&
         _interiorController.text.trim().isEmpty) {
       return 'Escribe al menos numero exterior o interior';
     }
-    if (_neighborhoodController.text.trim().isEmpty) return 'Escribe la colonia';
+    if (_neighborhoodController.text.trim().isEmpty)
+      return 'Escribe la colonia';
     if (_cityController.text.trim().isEmpty) return 'Escribe la ciudad';
     if (_stateController.text.trim().isEmpty) return 'Escribe el estado';
-    if (_postalCodeController.text.trim().isEmpty) return 'Escribe el codigo postal';
+    if (_postalCodeController.text.trim().isEmpty)
+      return 'Escribe el codigo postal';
+    if (_latitude == null || _longitude == null) {
+      return 'Selecciona el punto de entrega en el mapa';
+    }
     return null;
+  }
+
+  Future<void> _pickLocation() async {
+    final result = await Navigator.of(context).push<LocationSearchResult>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerPage(
+          title: 'Ubica tu direccion',
+          searchHint: 'Ej. Calle, numero, colonia, ciudad',
+          initialLatitude: _latitude,
+          initialLongitude: _longitude,
+          initialQuery: _selectedLocationLabel,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _selectedLocationLabel = result.displayName;
+      if (result.street.isNotEmpty) _streetController.text = result.street;
+      if (result.exteriorNumber.isNotEmpty) {
+        _exteriorController.text = result.exteriorNumber;
+      }
+      if (result.neighborhood.isNotEmpty) {
+        _neighborhoodController.text = result.neighborhood;
+      }
+      if (result.city.isNotEmpty) _cityController.text = result.city;
+      if (result.state.isNotEmpty) _stateController.text = result.state;
+      if (result.postalCode.isNotEmpty) {
+        _postalCodeController.text = result.postalCode;
+      }
+    });
+  }
+
+  Widget _locationPicker() {
+    final selectedPoint = _latitude != null && _longitude != null;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFCF7),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE6E1D8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Ubicacion de entrega',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Busca la calle o marca el punto exacto para que el repartidor llegue bien.',
+            style: TextStyle(color: Color(0xFF666666), height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _pickLocation,
+            icon: const Icon(Icons.map_outlined),
+            label: Text(
+              selectedPoint
+                  ? 'Cambiar ubicacion en el mapa'
+                  : 'Buscar ubicacion en el mapa',
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            !selectedPoint
+                ? 'Falta seleccionar el punto en el mapa.'
+                : 'Ubicacion seleccionada: $_selectedLocationLabel',
+            style: TextStyle(
+              color: !selectedPoint
+                  ? const Color(0xFF9A5B1B)
+                  : const Color(0xFF267348),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _save() async {
     final validationError = _validateBeforeSave();
     if (validationError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(validationError)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(validationError)));
       return;
     }
 
@@ -134,9 +235,9 @@ class _AddressFormPageState extends State<AddressFormPage> {
       Navigator.pop(context, address);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$error')));
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -172,35 +273,15 @@ class _AddressFormPageState extends State<AddressFormPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFCF7),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFFE6E1D8)),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Direccion manual activa',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'El mapa queda deshabilitado por ahora. Puedes capturar la direccion manualmente y seguir usando la app sin bloquearte.',
-                  style: TextStyle(
-                    color: Color(0xFF666666),
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _locationPicker(),
           const SizedBox(height: 16),
           _field('Etiqueta', _labelController),
           _field('Recibe', _recipientController),
-          _field('Telefono', _phoneController, keyboardType: TextInputType.phone),
+          _field(
+            'Telefono',
+            _phoneController,
+            keyboardType: TextInputType.phone,
+          ),
           _field('Calle', _streetController),
           Row(
             children: [
