@@ -132,6 +132,17 @@ namespace Nexo.Api.Controllers
             var wasDefault = address.IsDefault;
             var userId = address.UserId;
 
+            // Los pedidos conservan una copia de los datos de entrega. Por eso la
+            // dirección original puede eliminarse sin borrar ni alterar el historial.
+            var ordersUsingAddress = await _db.Orders
+                .Where(order => order.AddressId == address.Id)
+                .ToListAsync(cancellationToken);
+
+            foreach (var order in ordersUsingAddress)
+            {
+                order.AddressId = null;
+            }
+
             _db.Addresses.Remove(address);
             await _db.SaveChangesAsync(cancellationToken);
 
